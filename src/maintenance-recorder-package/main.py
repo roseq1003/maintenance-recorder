@@ -15,6 +15,7 @@ import sqlite3
 
 # FastAPIアプリを作成
 app = FastAPI()
+# Path(__file__)でmain.pyのパス取得→Resolve()で絶対パスに変換→parentで親フォルダを取得
 BASE_DIR = Path(__file__).resolve().parent
 
 
@@ -22,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent
 # staticフォルダの中身を使えるようにする
 app.mount(
     "/static",  # 「プロジェクト内の static フォルダを、
-    StaticFiles(directory=BASE_DIR / "static"),  # 起動する場所が変わっても読み込めるようにします。
+    StaticFiles(directory=BASE_DIR / "static"),  # main.pyと同じ場所にあるstaticフォルダ
     name="static"  # この設定の名前は static にします」
 )
 
@@ -31,7 +32,7 @@ app.mount(
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
-# "/" にアクセスされたときの処理
+# "/" にアクセスされたときの処理。GETで / にアクセスされたときこの関数を実行してくださいてこと。
 @app.get("/")
 def home(request: Request):
 
@@ -39,8 +40,8 @@ def home(request: Request):
     # ① SQLiteへ接続
     # --------------------------------------------------
 
-    connection = sqlite3.connect("maintenance.db")
-
+    DB_PATH = BASE_DIR / "maintenance.db"
+    connection = sqlite3.connect(DB_PATH)
     cursor = connection.cursor()
 
     # --------------------------------------------------
@@ -97,7 +98,7 @@ def home(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={
+        context={  # Jinja2へ渡すデータ！
             "device_count": device_count,
             "maintenance_list": maintenance_list
         }
