@@ -55,6 +55,13 @@ def home(request: Request):
             "task": "洗濯槽クリーニング",
             "location": "休憩室",
             "priority": "中"
+        },
+        {
+            "date": "2026/09/23232",
+            "device": "たんぽぽ",
+            "task": "洗濯槽クリーニング",
+            "location": "休憩室",
+            "priority": "中"
         }
     ]
 
