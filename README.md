@@ -1,8 +1,5 @@
-<<<<<<< HEAD
 # maintenance-recorder
 家にある生活用品・家電製品などのメンテナンス記録をつけるアプリ。記録をつけるだけじゃなくて通知を行ってもらうのが
 =======
 # maintenance-recorder-package
 
-This is an auto-generated Python package structure.
->>>>>>> 6dbc698 (Initial commit)
