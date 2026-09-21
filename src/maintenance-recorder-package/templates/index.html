@@ -70,7 +70,7 @@
         ・枠線
         などの見た目を担当する。
     -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/static/style.css">
 
 </head>
 
@@ -172,7 +172,7 @@
                 <h3>登録機器数</h3>
 
                 <!-- 通常の文章 -->
-                <p>8 台</p>
+                <p>{{ device_count }} 台</p>
 
             </div>
 
@@ -295,63 +295,17 @@
                 -->
                 <tbody>
 
+                    {% for item in maintenance_list %}
 
-                    <!--
-                        1件目のデータ。
-
-                        tr = 1行
-                    -->
                     <tr>
-
-
-                        <!--
-                            td = Table Data
-
-                            通常のデータセル。
-                        -->
-                        <td>2026/09/20</td>
-
-                        <td>エアコン</td>
-
-                        <td>フィルター清掃</td>
-
-                        <td>事務所 2F</td>
-
-                        <td>中</td>
-
+                        <td>{{ item.date }}</td>
+                        <td>{{ item.device }}</td>
+                        <td>{{ item.task }}</td>
+                        <td>{{ item.location }}</td>
+                        <td>{{ item.priority }}</td>
                     </tr>
 
-
-                    <!-- 2件目 -->
-                    <tr>
-
-                        <td>2026/09/25</td>
-
-                        <td>自家用車</td>
-
-                        <td>エンジンオイル交換</td>
-
-                        <td>駐車場</td>
-
-                        <td>高</td>
-
-                    </tr>
-
-
-                    <!-- 3件目 -->
-                    <tr>
-
-                        <td>2026/09/28</td>
-
-                        <td>洗濯機</td>
-
-                        <td>洗濯槽クリーニング</td>
-
-                        <td>休憩室</td>
-
-                        <td>中</td>
-
-                    </tr>
+                    {% endfor %}
 
                 </tbody>
 
@@ -379,7 +333,7 @@
         現段階ではJavaScriptが必要なければ、
         この行はなくても問題ない。
     -->
-    <script src="app.js"></script>
+    <script src="/static/app.js"></script>
 
 
 </body>

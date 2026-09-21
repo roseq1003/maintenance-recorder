@@ -18,9 +18,9 @@ app = FastAPI()
 # 「/static」というURLで
 # staticフォルダの中身を使えるようにする
 app.mount(
-    "/static",
-    StaticFiles(directory="static"),
-    name="static"
+    "/static",  # 「プロジェクト内の static フォルダを、
+    StaticFiles(directory="static"),  # Web上では /static というURLで公開します。
+    name="static"  # この設定の名前は static にします」
 )
 
 
@@ -32,8 +32,39 @@ templates = Jinja2Templates(directory="templates")
 @app.get("/")
 def home(request: Request):
 
-    # templates/index.htmlをブラウザへ返す
+    # 今はDBを使わず、Python側で直接8を設定
+    device_count = 8323123
+    maintenance_list = [
+        {
+            "date": "2026/09/20",
+            "device": "エアコン",
+            "task": "フィルター清掃",
+            "location": "事務所 2F",
+            "priority": "中"
+        },
+        {
+            "date": "2026/09/25",
+            "device": "自家用車",
+            "task": "エンジンオイル交換",
+            "location": "駐車場",
+            "priority": "高"
+        },
+        {
+            "date": "2026/09/28",
+            "device": "洗濯機",
+            "task": "洗濯槽クリーニング",
+            "location": "休憩室",
+            "priority": "中"
+        }
+    ]
+
     return templates.TemplateResponse(
         request=request,
-        name="index.html"
+        name="index.html",
+
+        # HTML（Jinja2）へ渡すデータ
+        context={
+            "device_count": device_count,
+            "maintenance_list": maintenance_list
+        }
     )
