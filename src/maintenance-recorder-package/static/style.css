@@ -1,518 +1,78 @@
-/* =========================================================
-   全体設定
-   ========================================================= */
-
-
-/*
- * 「*」は、ページ内のすべてのHTML要素を意味する。
- *
- * box-sizing: border-box;
- * → width や height を計算するときに、
- *   padding や border も含めて計算する設定。
- *
- * CSSを書くときによく最初に設定される。
- */
-* {
-    box-sizing: border-box;
-}
-
-
-/*
- * body
- * → HTMLの <body> 全体に対する設定。
- *   ページ全体の基本デザインをここで決めている。
- */
+/* 全体：幅の計算に、枠線と内側の余白も含めます。 */
+* { box-sizing: border-box; }
 body {
-
-    /*
-     * margin
-     * → 要素の「外側の余白」。
-     *
-     * ブラウザはデフォルトでbodyに少し余白を付けるので、
-     * 0にして余白を消している。
-     */
     margin: 0;
-
-
-    /*
-     * font-family
-     * → 使用するフォント。
-     *
-     * Arialを最優先。
-     * Arialが使えなければYu Gothic。
-     * それもなければOS標準のsans-serif。
-     *
-     * 左から順番に候補として使われる。
-     */
-    font-family: Arial, "Yu Gothic", sans-serif;
-
-
-    /*
-     * background
-     * → ページ全体の背景色。
-     *
-     * #f3f6f9 はかなり薄いグレー。
-     */
+    font-family: "Yu Gothic", "Meiryo", sans-serif;
     background: #f3f6f9;
-
-
-    /*
-     * color
-     * → 基本となる文字色。
-     *
-     * 子要素で別のcolorを指定しなければ、
-     * 基本的にこの色が使われる。
-     */
     color: #1f2937;
+    line-height: 1.6;
 }
+a { color: inherit; }
+button { font: inherit; }
 
+/* ヘッダーとナビゲーション */
+.site-header { padding: 24px 32px; background: #174a7e; color: white; }
+.site-header h1 { margin: 0; font-size: 26px; }
+.site-header p { margin: 6px 0 0; font-size: 14px; }
+nav { display: flex; flex-wrap: wrap; padding: 0 24px; background: white; border-bottom: 1px solid #dce3eb; }
+nav a, nav button { padding: 16px 20px; border: 0; border-bottom: 3px solid transparent; background: white; text-decoration: none; }
+nav a[aria-current="page"] { color: #174a7e; border-bottom-color: #174a7e; font-weight: bold; }
+nav a:hover { background: #eaf2fb; }
+nav button:disabled { color: #667085; cursor: not-allowed; }
+:focus-visible { outline: 3px solid #286fc0; outline-offset: 3px; }
 
+/* 本文の最大幅を決め、左右の余白を均等にします。 */
+main { max-width: 1280px; margin: 0 auto; padding: 28px 32px 48px; }
+.page-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.page-heading h2 { margin: 0; font-size: 24px; }
+.demo-label { padding: 3px 10px; border-radius: 6px; background: #e2eaf3; color: #174a7e; font-size: 12px; }
+.sample-note, .section-note { color: #596579; font-size: 14px; }
+.sample-note { margin: 8px 0 24px; }
 
-/* =========================================================
-   ヘッダー
-   ========================================================= */
+/* Grid（グリッド）でカードを同じ幅の4列に並べます。 */
+.summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 28px; }
+.card, .panel { background: white; border: 1px solid #dce3eb; border-radius: 10px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03); }
+.card { padding: 20px; }
+.card h3 { margin: 0; font-size: 14px; }
+.card h3 a { text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.card p { margin: 12px 0 4px; color: #174a7e; font-size: 34px; font-weight: bold; }
+.card p span { font-size: 16px; font-weight: normal; }
+.card small { color: #596579; font-size: 12px; }
+.warning { border-top: 4px solid #bb3030; }
+.warning p, .overdue-date { color: #ad2424; }
 
+/* 一覧の見出しと表 */
+.panel { padding: 24px; margin-bottom: 24px; scroll-margin-top: 16px; }
+.panel h2 { margin: 0 0 16px; font-size: 18px; }
+.count { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 6px; background: #eef3f8; font-size: 13px; font-weight: normal; }
+.overdue-panel { border-left: 4px solid #bb3030; }
+.section-note { margin: -6px 0 16px; }
+/* overflow-x: autoで、表が収まらないときだけ横スクロールできます。 */
+.table-scroll { overflow-x: auto; }
+table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 14px 12px; text-align: left; border-bottom: 1px solid #e5eaf0; }
+th { background: #eef3f8; color: #44546a; white-space: nowrap; }
+td:first-child { white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: #f8fafc; }
+.priority { display: inline-block; padding: 2px 12px; border-radius: 20px; background: #edf1f5; white-space: nowrap; }
+/* HTMLのdata-levelの値に合わせて色を変えます。文字でも重要度を伝えます。 */
+.priority[data-level="高"] { background: #fde9e8; color: #a62424; }
+.priority[data-level="中"] { background: #fff1d6; color: #795100; }
+.priority[data-level="低"] { background: #e4f3ee; color: #21654e; }
+.empty-state { text-align: center; color: #596579; padding: 28px; }
 
-/*
- * HTMLの <header> に適用。
- *
- * 今回なら、
- *
- * <header>
- *     <h1>🔧 機器メンテナンス管理</h1>
- * </header>
- *
- * の部分。
- */
-header {
-
-    /* ヘッダーの背景色 */
-    background: #174a7e;
-
-    /* ヘッダー内の文字色 */
-    color: white;
-
-
-    /*
-     * padding
-     * → 要素の「内側の余白」。
-     *
-     * 20px 40px
-     *      ↑
-     * 上下20px
-     * 左右40px
-     */
-    padding: 20px 40px;
+/* メディアクエリ：画面幅に応じて列数や余白を変える指定です。 */
+@media (max-width: 1000px) {
+    .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
-
-/*
- * 「headerの中にあるh1」にだけ適用。
- *
- * HTMLでいうと、
- *
- * <header>
- *     <h1>ここ</h1>
- * </header>
- *
- * という指定。
- */
-header h1 {
-
-    /*
-     * h1にはブラウザ標準のmarginがある。
-     * それを消している。
-     */
-    margin: 0;
-}
-
-
-
-/* =========================================================
-   ナビゲーション
-   ========================================================= */
-
-
-/*
- * <nav> 全体に対する設定。
- *
- * <nav>
- *     <button>メイン</button>
- *     <button>登録機器一覧</button>
- *     <button>機器登録</button>
- * </nav>
- */
-nav {
-
-    /*
-     * display: flex;
-     *
-     * navの中にある要素を横方向に並べる。
-     *
-     * これがないとbuttonの配置方法が変わってくる。
-     */
-    display: flex;
-
-
-    /* nav全体の背景色 */
-    background: white;
-
-
-    /*
-     * 下側に1pxの線を引く。
-     *
-     * solid → 実線
-     * #ddd  → 薄いグレー
-     */
-    border-bottom: 1px solid #ddd;
-}
-
-
-/*
- * navの中にあるbuttonだけを指定。
- *
- * 普通のbutton全部ではなく、
- *
- * nav button
- *
- * とすることで
- * 「navの中のbutton」に限定している。
- */
-nav button {
-
-    /* ボタンの横幅 */
-    width: 220px;
-
-
-    /* ボタン内部の余白 */
-    padding: 18px;
-
-
-    /* ボタン標準の枠線を消す */
-    border: none;
-
-
-    /* ボタンの背景を白にする */
-    background: white;
-
-
-    /* 文字サイズ */
-    font-size: 16px;
-
-
-    /*
-     * マウスカーソルを
-     * 「指のマーク」にする。
-     *
-     * クリック可能であることが分かりやすくなる。
-     */
-    cursor: pointer;
-}
-
-
-/*
- * :hover
- * → マウスカーソルが乗ったとき。
- *
- * navのbuttonにマウスを乗せたときだけ、
- * 背景色を変更する。
- */
-nav button:hover {
-
-    background: #eaf2fb;
-}
-
-
-
-/* =========================================================
-   メイン部分
-   ========================================================= */
-
-
-/*
- * HTMLの <main> に対する設定。
- */
-main {
-
-    /*
-     * mainの内側に30pxの余白を作る。
-     *
-     * そのため画面端にコンテンツが
-     * ベタ付けされなくなる。
-     */
-    padding: 30px;
-}
-
-
-
-/* =========================================================
-   上部カード
-   ========================================================= */
-
-
-/*
- * 「summary」というclassを持つ要素。
- *
- * HTMLでは、
- *
- * <section class="summary">
- *
- * の部分。
- *
- * classをCSSで指定するときは
- * 先頭に「.」を付ける。
- */
-.summary {
-
-    /*
-     * summary内のcardを横並びにする。
-     */
-    display: flex;
-
-
-    /*
-     * 子要素同士の間隔。
-     *
-     * 今回ならcardとcardの間を20px空ける。
-     */
-    gap: 20px;
-
-
-    /*
-     * summaryの下側に30pxの余白を作る。
-     *
-     * 下にあるメンテナンス一覧との間隔になる。
-     */
-    margin-bottom: 30px;
-}
-
-
-/*
- * class="card" を持つ要素すべてに適用。
- *
- * HTMLでは、
- *
- * <div class="card">
- *
- * など。
- */
-.card {
-
-    /*
-     * flex: 1;
-     *
-     * 親要素がdisplay:flexなので、
-     * 使用できる横幅を各cardで均等に分ける。
-     *
-     * cardが4つなら、
-     * 基本的に4等分されるイメージ。
-     */
-    flex: 1;
-
-
-    /* カードの背景色 */
-    background: white;
-
-
-    /* カード内部の余白 */
-    padding: 20px;
-
-
-    /*
-     * カードの角を丸くする。
-     */
-    border-radius: 10px;
-
-
-    /*
-     * カードに影を付ける。
-     *
-     * 0              → 横方向のズレ
-     * 2px            → 下方向のズレ
-     * 8px            → 影のぼかし
-     * rgba(...)      → 影の色
-     *
-     * rgbaの最後の0.08は透明度。
-     */
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
-
-/*
- * cardの中にあるh3だけに適用。
- */
-.card h3 {
-
-    /*
-     * h3標準の上側marginを消す。
-     */
-    margin-top: 0;
-}
-
-
-/*
- * cardの中にあるpだけに適用。
- *
- * 今回なら
- *
- * <div class="card">
- *     <h3>登録機器数</h3>
- *     <p>8 台</p>
- * </div>
- *
- * の「8 台」の部分。
- */
-.card p {
-
-    /* 大きな文字にする */
-    font-size: 32px;
-
-
-    /* 太字 */
-    font-weight: bold;
-
-
-    /* 青色 */
-    color: #174a7e;
-}
-
-
-/*
- * warningというclassを持つ要素の中のp。
- *
- * 今回HTMLでは、
- *
- * <div class="card warning">
- *
- * となっていた。
- *
- * この要素は
- *
- * card
- * warning
- *
- * という2つのclassを持っている。
- */
-.warning p {
-
-    /*
-     * warning内のpだけ赤色に上書き。
-     *
-     * .card p では青だったが、
-     * こちらの指定によって赤になる。
-     */
-    color: #e53935;
-}
-
-
-
-/* =========================================================
-   メンテナンス一覧パネル
-   ========================================================= */
-
-
-/*
- * class="panel" の要素。
- *
- * 今回はメンテナンス予定一覧全体を
- * 白いカードのように見せている。
- */
-.panel {
-
-    /* 背景を白にする */
-    background: white;
-
-
-    /* 内側の余白 */
-    padding: 25px;
-
-
-    /* 角を丸くする */
-    border-radius: 10px;
-
-
-    /* 薄い影を付ける */
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
-
-
-/* =========================================================
-   テーブル
-   ========================================================= */
-
-
-/*
- * HTMLの <table> 全体。
- */
-table {
-
-    /*
-     * 親要素いっぱいまで横幅を使う。
-     */
-    width: 100%;
-
-
-    /*
-     * テーブルのセル同士の境界線を
-     * まとめて表示する。
-     *
-     * テーブルをスッキリ見せるためによく使う。
-     */
-    border-collapse: collapse;
-}
-
-
-/*
- * <th>
- * → テーブルの見出し部分。
- *
- * 今回なら、
- *
- * 実施予定日
- * 機器名
- * メンテナンス項目
- * 設置場所
- * 重要度
- *
- * の部分。
- */
-th {
-
-    /* 文字を左寄せ */
-    text-align: left;
-
-
-    /* 見出し部分の背景色 */
-    background: #eef3f8;
-}
-
-
-/*
- * th と td の両方に同じCSSを適用。
- *
- * カンマ「,」を使うことで、
- *
- * thにも
- * tdにも
- *
- * 同じ設定を適用できる。
- */
-th,
-td {
-
-    /*
-     * セル内部の余白。
-     *
-     * 文字とセル境界がくっつかないようにする。
-     */
-    padding: 14px;
-
-
-    /*
-     * 各セルの下側に薄い線を引く。
-     *
-     * これによって表の行が見やすくなる。
-     */
-    border-bottom: 1px solid #ddd;
+@media (max-width: 600px) {
+    .site-header { padding: 20px 16px; }
+    .site-header h1 { font-size: 21px; }
+    nav { padding: 0 8px; }
+    nav a, nav button { padding: 12px 8px; font-size: 12px; }
+    main { padding: 20px 16px; }
+    .summary { grid-template-columns: 1fr; gap: 12px; }
+    .card { padding: 16px; }
+    .panel { padding: 16px; }
 }

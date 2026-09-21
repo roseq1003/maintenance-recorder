@@ -1,341 +1,143 @@
-<!--
-    このファイルが「HTML5」で書かれていることを
-    ブラウザに伝える宣言。
--->
 <!DOCTYPE html>
-
-
-<!--
-    HTML文書全体の開始。
-
-    lang="ja"
-    → このページの主な言語は日本語ですよ、という指定。
--->
 <html lang="ja">
-
-
-<!--
-    head
-    -------------------------
-    Webページそのものの設定を書く場所。
-
-    基本的に、ここに書いた内容は
-    ページ本文としては表示されない。
--->
 <head>
-
-    <!--
-        文字コードをUTF-8に指定。
-
-        日本語の文字化けを防ぐためにも
-        基本的に入れておけばOK。
-    -->
     <meta charset="UTF-8">
-
-
-    <!--
-        スマートフォンなどで表示したときの
-        ページ幅を調整するための設定。
-
-        width=device-width
-        → 画面幅を端末の幅に合わせる
-
-        initial-scale=1.0
-        → 最初の表示倍率を100%にする
-    -->
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-
-    <!--
-        ブラウザのタブに表示されるタイトル。
-    -->
-    <title>機器メンテナンス管理君 1.0</title>
-
-
-    <!--
-        外部CSSファイルを読み込む。
-
-        href="style.css"
-        → このHTMLファイルと同じ場所にある
-          style.css を読み込む。
-
-        CSSは主に
-        ・色
-        ・文字サイズ
-        ・配置
-        ・余白
-        ・枠線
-        などの見た目を担当する。
-    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>機器メンテナンス管理</title>
+    <!-- /static/ は、main.pyが公開しているCSS・JavaScriptの置き場所です。 -->
     <link rel="stylesheet" href="/static/style.css">
-
 </head>
-
-
-<!--
-    body
-    -------------------------
-    実際にブラウザ画面へ表示される内容。
--->
 <body>
-
-
-    <!--
-        header
-        -------------------------
-        ページ上部のヘッダー部分。
-
-        今回はページタイトルを表示している。
-    -->
-    <header>
-
-        <!--
-            h1 = 最も重要な見出し。
-
-            基本的にはページのメインタイトルとして使用。
-        -->
+    <header class="site-header">
         <h1>🔧 機器メンテナンス管理</h1>
-
+        <p>機器の点検予定と、日々のお手入れをひと目で。</p>
     </header>
 
-
-    <!--
-        nav
-        -------------------------
-        navigation（ナビゲーション）。
-
-        ページ移動用のメニューなどを
-        まとめるために使用する。
-    -->
-    <nav>
-
-        <!--
-            button = ボタン。
-
-            現時点では押しても何も起きない。
-
-            今後、
-            ・リンク
-            ・JavaScript
-            などを設定することで動作させる。
-        -->
-        <button>メイン</button>
-
-        <button>登録機器一覧</button>
-
-        <button>機器登録</button>
-
+    <nav aria-label="メインナビゲーション">
+        <a href="#dashboard" aria-current="page">メイン</a>
+        <!-- 画面切り替えはSTEP 2で追加するため、今は操作できない状態です。 -->
+        <button type="button" disabled>登録機器一覧（準備中）</button>
+        <button type="button" disabled>機器登録（準備中）</button>
     </nav>
 
+    <main id="dashboard">
+        <div class="page-heading">
+            <h2>ダッシュボード</h2>
+            <span class="demo-label">サンプル表示</span>
+        </div>
+        <p class="sample-note">2026年9月21日時点の表示例です。データの保存・日付の自動判定はまだ行いません。</p>
 
-    <!--
-        main
-        -------------------------
-        このページの主要コンテンツ。
-
-        headerやnavとは違い、
-        「このページでユーザーに見せたい中心部分」
-        を入れる。
-    -->
-    <main>
-
-
-        <!--
-            section
-            -------------------------
-            ページ内のひとまとまりの内容。
-
-            class="summary"
-            → このsectionに「summary」という名前を付けている。
-
-            この名前をCSSなどから利用できる。
-        -->
-        <section class="summary">
-
-
-            <!--
-                div
-                -------------------------
-                汎用的な「箱」。
-
-                class="card"
-                → この箱にcardという名前を付けている。
-
-                CSSでカード風のデザインにするときなどに使用。
-            -->
+        <!-- classはCSSから見た目を指定するための名前です。 -->
+        <section class="summary" aria-label="登録機器とメンテナンスの集計">
             <div class="card">
-
-                <!-- 小見出し -->
                 <h3>登録機器数</h3>
-
-                <!-- 通常の文章 -->
-                <p>{{ device_count }} 台</p>
-
+                <p>{{ device_count }} <span>台</span></p>
+                <small>登録済み機器の合計</small>
             </div>
-
-
             <div class="card">
-
-                <h3>今月のメンテナンス予定</h3>
-
-                <p>3 件</p>
-
+                <h3><a href="#this-month">今月のメンテナンス予定</a></h3>
+                <!-- |length は、Pythonから受け取った一覧の件数を数えます。 -->
+                <p>{{ maintenance_list|length }} <span>件</span></p>
+                <small>2026年9月・期限超過を除く</small>
             </div>
-
-
             <div class="card">
-
-                <h3>来月のメンテナンス予定</h3>
-
-                <p>2 件</p>
-
+                <h3><a href="#next-month">来月のメンテナンス予定</a></h3>
+                <p>{{ next_month_list|length }} <span>件</span></p>
+                <small>2026年10月</small>
             </div>
-
-
-            <!--
-                classには複数の名前を指定できる。
-
-                この場合、
-
-                card
-                warning
-
-                という2つのclassを持っている。
-
-                例えばCSSで
-
-                .card {
-                    ...
-                }
-
-                .warning {
-                    ...
-                }
-
-                の両方を適用できる。
-            -->
             <div class="card warning">
-
-                <h3>期限超過</h3>
-
-                <p>1 件</p>
-
+                <h3><a href="#overdue">期限超過</a></h3>
+                <p>{{ overdue_list|length }} <span>件</span></p>
+                <small>予定日を過ぎた未実施の項目</small>
             </div>
-
         </section>
 
-
-
-        <!--
-            ここからメンテナンス予定一覧。
-
-            panelというclassを付けている。
-        -->
-        <section class="panel">
-
-
-            <!--
-                h2 = h1より一段下の見出し。
-            -->
-            <h2>今月のメンテナンス予定</h2>
-
-
-            <!--
-                table
-                -------------------------
-                表を作るためのタグ。
-            -->
-            <table>
-
-
-                <!--
-                    thead
-                    -------------------------
-                    tableの「見出し部分」。
-                -->
-                <thead>
-
-
-                    <!--
-                        tr = Table Row
-
-                        表の「1行」を表す。
-                    -->
-                    <tr>
-
-
-                        <!--
-                            th = Table Header
-
-                            表の見出しセル。
-                        -->
-                        <th>実施予定日</th>
-
-                        <th>機器名</th>
-
-                        <th>メンテナンス項目</th>
-
-                        <th>設置場所</th>
-
-                        <th>重要度</th>
-
-                    </tr>
-
-                </thead>
-
-
-
-                <!--
-                    tbody
-                    -------------------------
-                    tableの実際のデータ部分。
-                -->
-                <tbody>
-
-                    {% for item in maintenance_list %}
-
-                    <tr>
-                        <td>{{ item.date }}</td>
-                        <td>{{ item.device }}</td>
-                        <td>{{ item.task }}</td>
-                        <td>{{ item.location }}</td>
-                        <td>{{ item.priority }}</td>
-                    </tr>
-
-                    {% endfor %}
-
-                </tbody>
-
-            </table>
-
+        <section class="panel" id="this-month" aria-labelledby="this-month-title">
+            <h2 id="this-month-title">今月のメンテナンス予定 <span class="count">{{ maintenance_list|length }}件</span></h2>
+            <!-- 狭い画面では、この箱の中だけを横にスクロールできます。 -->
+            <div class="table-scroll" role="region" aria-label="今月の予定表" tabindex="0">
+                <table>
+                    <thead>
+                        <tr><th scope="col">実施予定日</th><th scope="col">機器名</th><th scope="col">メンテナンス項目</th><th scope="col">設置場所</th><th scope="col">重要度</th></tr>
+                    </thead>
+                    <tbody>
+                        <!-- forは、一覧のデータを1件ずつ取り出して行を作る処理です。 -->
+                        {% for item in maintenance_list %}
+                        <tr>
+                            <td>{{ item.date }}</td><td>{{ item.device }}</td><td>{{ item.task }}</td><td>{{ item.location }}</td>
+                            <td><span class="priority" data-level="{{ item.priority }}">{{ item.priority }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="empty-state">今月の予定はありません。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </section>
 
+        <section class="panel" id="next-month" aria-labelledby="next-month-title">
+            <h2 id="next-month-title">来月のメンテナンス予定 <span class="count">{{ next_month_list|length }}件</span></h2>
+            <div class="table-scroll" role="region" aria-label="来月の予定表" tabindex="0">
+                <table>
+                    <thead>
+                        <tr><th scope="col">実施予定日</th><th scope="col">機器名</th><th scope="col">メンテナンス項目</th><th scope="col">設置場所</th><th scope="col">重要度</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for item in next_month_list %}
+                        <tr>
+                            <td>{{ item.date }}</td><td>{{ item.device }}</td><td>{{ item.task }}</td><td>{{ item.location }}</td>
+                            <td><span class="priority" data-level="{{ item.priority }}">{{ item.priority }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="empty-state">来月の予定はありません。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel overdue-panel" id="overdue" aria-labelledby="overdue-title">
+            <h2 id="overdue-title">期限超過 <span class="count">{{ overdue_list|length }}件</span></h2>
+            <p class="section-note">予定日を過ぎています。実施状況を確認してください。</p>
+            <div class="table-scroll" role="region" aria-label="期限超過の予定表" tabindex="0">
+                <table>
+                    <thead>
+                        <tr><th scope="col">実施予定日</th><th scope="col">機器名</th><th scope="col">メンテナンス項目</th><th scope="col">設置場所</th><th scope="col">重要度</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for item in overdue_list %}
+                        <tr>
+                            <td class="overdue-date">{{ item.date }}</td><td>{{ item.device }}</td><td>{{ item.task }}</td><td>{{ item.location }}</td>
+                            <td><span class="priority" data-level="{{ item.priority }}">{{ item.priority }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="empty-state">期限超過はありません。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel" aria-labelledby="history-title">
+            <h2 id="history-title">最近のメンテナンス実施履歴</h2>
+            <div class="table-scroll" role="region" aria-label="最近の実施履歴表" tabindex="0">
+                <table>
+                    <thead>
+                        <tr><th scope="col">実施日</th><th scope="col">機器名</th><th scope="col">メンテナンス項目</th><th scope="col">実施者</th><th scope="col">備考</th><th scope="col">次回予定日</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for item in recent_history %}
+                        <tr>
+                            <td>{{ item.date }}</td><td>{{ item.device }}</td><td>{{ item.task }}</td><td>{{ item.performed_by }}</td><td>{{ item.note }}</td><td>{{ item.next_due_date }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="empty-state">実施履歴はまだありません。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
     </main>
-
-
-    <!--
-        JavaScriptファイルを読み込む。
-
-        src="app.js"
-        → 同じ場所にあるapp.jsを実行する。
-
-        JavaScriptでは例えば、
-
-        ・ボタンを押したときの処理
-        ・画面の一部を書き換える
-        ・APIへデータを送る
-
-        といった処理ができる。
-
-        現段階ではJavaScriptが必要なければ、
-        この行はなくても問題ない。
-    -->
     <script src="/static/app.js"></script>
-
-
 </body>
-
 </html>
