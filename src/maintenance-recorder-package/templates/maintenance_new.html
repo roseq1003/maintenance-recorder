@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>メンテナンス登録</title>
+</head>
+
+<body>
+
+    <h1>メンテナンス登録</h1>
+
+    <form method="post" action="/maintenance/new">
+
+        <p>
+            <label>実施予定日</label><br>
+            <input type="date" name="date" required>
+        </p>
+
+        <p>
+            <label>機器名</label><br>
+            <input type="text" name="device" required>
+        </p>
+
+        <p>
+            <label>メンテナンス項目</label><br>
+            <input type="text" name="task" required>
+        </p>
+
+        <p>
+            <label>設置場所</label><br>
+            <input type="text" name="location" required>
+        </p>
+
+        <p>
+            <label>重要度</label><br>
+
+            <select name="priority">
+                <option value="低">低</option>
+                <option value="中">中</option>
+                <option value="高">高</option>
+            </select>
+        </p>
+
+        <button type="submit">登録する</button>
+
+    </form>
+
+</body>
+
+</html>

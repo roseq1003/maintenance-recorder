@@ -13,6 +13,10 @@ from fastapi import Request
 
 import sqlite3
 
+# SQL挿入のためのフォームデータを扱う
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import RedirectResponse
+
 # FastAPIアプリを作成
 app = FastAPI()
 # Path(__file__)でmain.pyのパス取得→Resolve()で絶対パスに変換→parentで親フォルダを取得
@@ -59,6 +63,7 @@ def home(request: Request):
         FROM maintenance
     """)
 
+    # rowsにはタプルのリストが入る。例: [(1, '2026-09-21', 'おナホール', '清掃', 'さやかの部屋', '高'), (2, '2026-09-22', 'エアコン', 'フィルター清掃', '事務所 2F', '中')]
     rows = cursor.fetchall()
 
     # --------------------------------------------------
@@ -102,4 +107,53 @@ def home(request: Request):
             "device_count": device_count,
             "maintenance_list": maintenance_list
         }
+    )
+
+
+@app.get("/maintenance/new")
+def maintenance_new(request: Request):
+
+    return templates.TemplateResponse(
+        request=request,
+        name="maintenance_new.html"
+    )
+
+
+@app.post("/maintenance/new")
+def create_maintenance(
+    date: str = Form(...),
+    device: str = Form(...),
+    task: str = Form(...),
+    location: str = Form(...),
+    priority: str = Form(...)
+):
+
+    connection = sqlite3.connect("maintenance.db")
+
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO maintenance (
+            date,
+            device,
+            task,
+            location,
+            priority
+        )
+        VALUES (?, ?, ?, ?, ?)
+    """, (
+        date,
+        device,
+        task,
+        location,
+        priority
+    ))
+
+    connection.commit()
+
+    connection.close()
+
+    return RedirectResponse(
+        url="/",
+        status_code=303
     )
