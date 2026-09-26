@@ -21,6 +21,7 @@ from fastapi.responses import RedirectResponse
 app = FastAPI()
 # Path(__file__)でmain.pyのパス取得→Resolve()で絶対パスに変換→parentで親フォルダを取得
 BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = BASE_DIR / "maintenance.db"
 
 
 # 「/static」というURLで
@@ -128,7 +129,7 @@ def create_maintenance(
     priority: str = Form(...)
 ):
 
-    connection = sqlite3.connect("maintenance.db")
+    connection = sqlite3.connect(DB_PATH)
 
     cursor = connection.cursor()
 
