@@ -45,7 +45,6 @@ def home(request: Request):
     # ① SQLiteへ接続
     # --------------------------------------------------
 
-    DB_PATH = BASE_DIR / "maintenance.db"
     connection = sqlite3.connect(DB_PATH)
     cursor = connection.cursor()
 
@@ -88,15 +87,11 @@ def home(request: Request):
     # --------------------------------------------------
     # ④ 登録件数を取得
     # --------------------------------------------------
+        cursor.execute("""
+        SELECT COUNT(*) FROM devices
+    """)
 
-    device_count = len(maintenance_list)
-
-    # --------------------------------------------------
-    # ⑤ DB接続終了
-    # --------------------------------------------------
-
-    connection.close()
-
+    device_count = cursor.fetchone()[0]
     # --------------------------------------------------
     # ⑥ Jinja2へ渡す
     # --------------------------------------------------
