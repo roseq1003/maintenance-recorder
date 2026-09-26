@@ -3,14 +3,17 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>メンテナンス登録</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>機器登録</title>
+    <!-- /static/ は、main.pyが公開しているCSS・JavaScriptの置き場所です。 -->
+    <link rel="stylesheet" href="/static/style.css"> <!-- HTMLファイルに外部のCSS（スタイルシート）ファイルを読み込ませて、デザインや見た目を適用するための記述 -->
 </head>
 
 <body>
 
     <h1>メンテナンス登録</h1>
 
-    <form method="post" action="/maintenance/new">
+    <form method="post" action="/maintenance/new"> <!-- このフォームを送信したら、/maintenance/new というURLに POST でデータを送ってね-->
 
         <p>
             <label>実施予定日</label><br>

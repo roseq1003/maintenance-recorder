@@ -1,57 +1,49 @@
-# FastAPI本体
-from fastapi import FastAPI
+from datetime import date
 from pathlib import Path
-
-# HTMLファイルを扱うための機能
-from fastapi.templating import Jinja2Templates
-
-# CSSやJavaScriptなどの静的ファイルを扱う
-from fastapi.staticfiles import StaticFiles
-
-# ブラウザから送られてきたリクエスト情報を扱う
-from fastapi import Request
-
 import sqlite3
 
-# SQL挿入のためのフォームデータを扱う
 from fastapi import FastAPI, Request, Form
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
-# FastAPIアプリを作成
+
+# FastAPIアプリ作成
 app = FastAPI()
-# Path(__file__)でmain.pyのパス取得→Resolve()で絶対パスに変換→parentで親フォルダを取得
+
+
+# main.pyのあるフォルダ
 BASE_DIR = Path(__file__).resolve().parent
+
+# DBファイル
 DB_PATH = BASE_DIR / "maintenance.db"
 
 
-# 「/static」というURLで
-# staticフォルダの中身を使えるようにする
+# staticフォルダ公開
 app.mount(
-    "/static",  # 「プロジェクト内の static フォルダを、
-    StaticFiles(directory=BASE_DIR / "static"),  # main.pyと同じ場所にあるstaticフォルダ
-    name="static"  # この設定の名前は static にします」
+    "/static",
+    StaticFiles(directory=BASE_DIR / "static"),
+    name="static"
 )
 
 
-# HTMLテンプレートはtemplatesフォルダに置く
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
+# templatesフォルダ設定
+templates = Jinja2Templates(
+    directory=BASE_DIR / "templates"
+)
 
 
-# "/" にアクセスされたときの処理。GETで / にアクセスされたときこの関数を実行してくださいてこと。
+# ==================================================
+# トップページ
+# ==================================================
+
 @app.get("/")
 def home(request: Request):
-
-    # --------------------------------------------------
-    # ① SQLiteへ接続
-    # --------------------------------------------------
 
     connection = sqlite3.connect(DB_PATH)
     cursor = connection.cursor()
 
-    # --------------------------------------------------
-    # ② maintenanceテーブルからデータ取得
-    # --------------------------------------------------
-
+    # メンテナンス一覧取得
     cursor.execute("""
         SELECT
             id,
@@ -63,14 +55,9 @@ def home(request: Request):
         FROM maintenance
     """)
 
-    # rowsにはタプルのリストが入る。例: [(1, '2026-09-21', 'おナホール', '清掃', 'さやかの部屋', '高'), (2, '2026-09-22', 'エアコン', 'フィルター清掃', '事務所 2F', '中')]
     rows = cursor.fetchall()
 
-    # --------------------------------------------------
-    # ③ SQLiteから取得したデータを
-    #    Jinja2で扱いやすい辞書形式へ変換
-    # --------------------------------------------------
-
+    # Jinja2で扱いやすい辞書形式へ変換
     maintenance_list = []
 
     for row in rows:
@@ -84,27 +71,30 @@ def home(request: Request):
             "priority": row[5]
         })
 
-    # --------------------------------------------------
-    # ④ 登録件数を取得
-    # --------------------------------------------------
-        cursor.execute("""
+    # 登録機器数を取得
+    cursor.execute("""
         SELECT COUNT(*) FROM devices
     """)
 
     device_count = cursor.fetchone()[0]
-    # --------------------------------------------------
-    # ⑥ Jinja2へ渡す
-    # --------------------------------------------------
 
+    # DB接続終了
+    connection.close()
+
+    # HTMLを返す
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={  # Jinja2へ渡すデータ！
+        context={
             "device_count": device_count,
             "maintenance_list": maintenance_list
         }
     )
 
+
+# ==================================================
+# メンテナンス登録画面
+# ==================================================
 
 @app.get("/maintenance/new")
 def maintenance_new(request: Request):
@@ -115,9 +105,13 @@ def maintenance_new(request: Request):
     )
 
 
+# ==================================================
+# メンテナンス登録処理
+# ==================================================
+
 @app.post("/maintenance/new")
 def create_maintenance(
-    date: str = Form(...),
+    date: date = Form(...),
     device: str = Form(...),
     task: str = Form(...),
     location: str = Form(...),
@@ -125,7 +119,6 @@ def create_maintenance(
 ):
 
     connection = sqlite3.connect(DB_PATH)
-
     cursor = connection.cursor()
 
     cursor.execute("""
@@ -146,7 +139,6 @@ def create_maintenance(
     ))
 
     connection.commit()
-
     connection.close()
 
     return RedirectResponse(
