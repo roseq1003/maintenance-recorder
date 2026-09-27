@@ -145,3 +145,50 @@ def create_maintenance(
         url="/",
         status_code=303
     )
+
+
+@app.get("/devices/new")
+def device_new(request: Request):
+
+    return templates.TemplateResponse(
+        request=request,
+        name="device_new.html"
+    )
+
+
+@app.post("/devices/new")
+def create_device(
+    name: str = Form(...),
+    manufacturer: str = Form(""),
+    model_number: str = Form(""),
+    location: str = Form(""),
+    purchase_date: str = Form("")
+):
+
+    connection = sqlite3.connect(DB_PATH)
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO devices (
+            name,
+            manufacturer,
+            model_number,
+            location,
+            purchase_date
+        )
+        VALUES (?, ?, ?, ?, ?)
+    """, (
+        name,
+        manufacturer,
+        model_number,
+        location,
+        purchase_date
+    ))
+
+    connection.commit()
+    connection.close()
+
+    return RedirectResponse(
+        url="/",
+        status_code=303
+    )
