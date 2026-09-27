@@ -2,7 +2,7 @@ from datetime import date
 from pathlib import Path
 import sqlite3
 
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -91,60 +91,56 @@ def home(request: Request):
         }
     )
 
-
 # ==================================================
-# メンテナンス登録画面
-# ==================================================
-
-@app.get("/maintenance/new")
-def maintenance_new(request: Request):
-
-    return templates.TemplateResponse(
-        request=request,
-        name="maintenance_new.html"
-    )
-
-
-# ==================================================
-# メンテナンス登録処理
+# メンテナンス対応機器一覧一覧
 # ==================================================
 
-@app.post("/maintenance/new")
-def create_maintenance(
-    date: date = Form(...),
-    device: str = Form(...),
-    task: str = Form(...),
-    location: str = Form(...),
-    priority: str = Form(...)
-):
+
+@app.get("/devices")
+def device_list(request: Request):
 
     connection = sqlite3.connect(DB_PATH)
     cursor = connection.cursor()
 
     cursor.execute("""
-        INSERT INTO maintenance (
-            date,
-            device,
-            task,
+        SELECT
+            id,
+            name,
+            manufacturer,
+            model_number,
             location,
-            priority
-        )
-        VALUES (?, ?, ?, ?, ?)
-    """, (
-        date,
-        device,
-        task,
-        location,
-        priority
-    ))
+            purchase_date
+        FROM devices
+        ORDER BY id
+    """)
 
-    connection.commit()
+    rows = cursor.fetchall()
+
+    devices = []
+
+    for row in rows:
+        devices.append({
+            "id": row[0],
+            "name": row[1],
+            "manufacturer": row[2],
+            "model_number": row[3],
+            "location": row[4],
+            "purchase_date": row[5]
+        })
+
     connection.close()
 
-    return RedirectResponse(
-        url="/",
-        status_code=303
+    return templates.TemplateResponse(
+        request=request,
+        name="device_list.html",
+        context={
+            "devices": devices
+        }
     )
+
+# ==================================================
+# メンテナンス登録画面
+# ==================================================
 
 
 @app.get("/devices/new")
@@ -191,4 +187,56 @@ def create_device(
     return RedirectResponse(
         url="/",
         status_code=303
+    )
+
+
+@app.get("/devices/{device_id}")  # FastAPIのURLルーティング用の記法
+def device_detail(
+    request: Request,
+    device_id: int
+):
+
+    connection = sqlite3.connect(DB_PATH)
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            id,
+            name,
+            manufacturer,
+            model_number,
+            location,
+            purchase_date
+        FROM devices
+        WHERE id = ?
+    """, (
+        device_id,
+    ))
+
+    row = cursor.fetchone()
+
+    connection.close()
+
+    # 該当する機器が存在しなかった場合
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="機器が見つかりません"
+        )
+
+    device = {
+        "id": row[0],
+        "name": row[1],
+        "manufacturer": row[2],
+        "model_number": row[3],
+        "location": row[4],
+        "purchase_date": row[5]
+    }
+
+    return templates.TemplateResponse(
+        request=request,
+        name="device_detail.html",
+        context={
+            "device": device
+        }
     )

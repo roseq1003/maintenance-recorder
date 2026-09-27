@@ -1,3 +1,5 @@
+# initialでDB作成用
+
 import sqlite3
 from pathlib import Path
 

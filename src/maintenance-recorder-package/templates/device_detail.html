@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>{{ device.name }} - 機器詳細</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+    <h1>{{ device.name }}</h1>
+
+    <table>
+
+        <tr>
+            <th>ID</th>
+            <td>{{ device.id }}</td>
+        </tr>
+
+        <tr>
+            <th>メーカー</th>
+            <td>{{ device.manufacturer }}</td>
+        </tr>
+
+        <tr>
+            <th>型番</th>
+            <td>{{ device.model_number }}</td>
+        </tr>
+
+        <tr>
+            <th>設置場所</th>
+            <td>{{ device.location }}</td>
+        </tr>
+
+        <tr>
+            <th>購入日</th>
+            <td>{{ device.purchase_date }}</td>
+        </tr>
+
+    </table>
+
+    <p>
+        <a href="/devices">登録機器一覧へ戻る</a>
+    </p>
+
+    <p>
+        <a href="/">トップへ戻る</a>
+    </p>
+
+</body>
+
+</html>
