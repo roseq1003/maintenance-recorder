@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>メンテナンス実施記録</title>
+</head>
+
+<body>
+
+    <h1>メンテナンス実施記録</h1>
+
+    <p>
+        メンテナンス項目：{{ plan.name }}
+    </p>
+
+    <form
+        method="post"
+        action="/devices/{{ device_id }}/maintenance-plans/{{ plan.id }}/records"
+    >
+
+        <p>
+            <label>実施日</label><br>
+            <input
+                type="date"
+                name="performed_at"
+                required
+            >
+        </p>
+
+        <p>
+            <label>メーター値（任意）</label><br>
+            <input
+                type="number"
+                step="any"
+                name="meter_value"
+            >
+        </p>
+
+        <p>
+            <label>備考</label><br>
+            <input
+                type="text"
+                name="note"
+            >
+        </p>
+
+        <button type="submit">
+            登録する
+        </button>
+
+    </form>
+
+    <p>
+        <a href="/devices/{{ device_id }}">
+            機器詳細へ戻る
+        </a>
+    </p>
+
+</body>
+
+</html>

@@ -199,6 +199,10 @@ def device_detail(
     connection = sqlite3.connect(DB_PATH)
     cursor = connection.cursor()
 
+    # ----------------------------
+    # 機器情報を取得
+    # ----------------------------
+
     cursor.execute("""
         SELECT
             id,
@@ -215,10 +219,10 @@ def device_detail(
 
     row = cursor.fetchone()
 
-    connection.close()
-
     # 該当する機器が存在しなかった場合
     if row is None:
+        connection.close()
+
         raise HTTPException(
             status_code=404,
             detail="機器が見つかりません"
@@ -233,10 +237,247 @@ def device_detail(
         "purchase_date": row[5]
     }
 
+    # ----------------------------
+    # この機器のメンテナンス設定を取得
+    # ----------------------------
+
+    cursor.execute("""
+        SELECT
+            id,
+            device_id,
+            name,
+            description,
+            interval_value,
+            interval_unit,
+            priority
+        FROM maintenance_plans
+        WHERE device_id = ?
+        ORDER BY id
+    """, (
+        device_id,
+    ))
+
+    rows = cursor.fetchall()  # 結局返ってくる形はリストの中にタプル(1行分)が入っている形になる
+
+    maintenance_plans = []
+
+    for row in rows:
+        maintenance_plans.append({
+            "id": row[0],
+            "device_id": row[1],
+            "name": row[2],
+            "description": row[3],
+            "interval_value": row[4],
+            "interval_unit": row[5],
+            "priority": row[6]
+        })
+
+    connection.close()
+
     return templates.TemplateResponse(
         request=request,
         name="device_detail.html",
         context={
+            "device": device,
+            "maintenance_plans": maintenance_plans
+        }
+    )
+
+
+@app.get("/devices/{device_id}/maintenance/new")
+def maintenance_plan_new(
+    request: Request,
+    device_id: int
+):
+
+    connection = sqlite3.connect(DB_PATH)
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            id,
+            name
+        FROM devices
+        WHERE id = ?
+    """, (
+        device_id,
+    ))
+
+    row = cursor.fetchone()
+
+    connection.close()
+
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="機器が見つかりません"
+        )
+
+    device = {
+        "id": row[0],
+        "name": row[1]
+    }
+
+    return templates.TemplateResponse(
+        request=request,
+        name="maintenance_plan_new.html",
+        context={
             "device": device
         }
+    )
+
+
+@app.post("/devices/{device_id}/maintenance/new")
+def create_maintenance_plan(
+    device_id: int,
+    name: str = Form(...),
+    description: str = Form(""),
+    interval_value: int = Form(...),
+    interval_unit: str = Form(...),
+    priority: str = Form(...)
+):
+
+    connection = sqlite3.connect(DB_PATH)
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO maintenance_plans (
+            device_id,
+            name,
+            description,
+            interval_value,
+            interval_unit,
+            priority
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        device_id,
+        name,
+        description,
+        interval_value,
+        interval_unit,
+        priority
+    ))
+
+    connection.commit()
+    connection.close()
+
+    return RedirectResponse(
+        url=f"/devices/{device_id}",
+        status_code=303
+    )
+
+
+@app.get(
+    "/devices/{device_id}/maintenance-plans/{plan_id}/records/new"
+)
+def maintenance_record_new(
+    request: Request,
+    device_id: int,
+    plan_id: int
+):
+
+    connection = sqlite3.connect(DB_PATH)
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            id,
+            name
+        FROM maintenance_plans
+        WHERE id = ?
+        AND device_id = ?
+    """, (
+        plan_id,
+        device_id
+    ))
+
+    row = cursor.fetchone()
+
+    connection.close()
+
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="メンテナンス項目が見つかりません"
+        )
+
+    plan = {
+        "id": row[0],
+        "name": row[1]
+    }
+
+    return templates.TemplateResponse(
+        request=request,
+        name="maintenance_record_new.html",
+        context={
+            "device_id": device_id,
+            "plan": plan
+        }
+    )
+
+
+@app.post(
+    "/devices/{device_id}/maintenance-plans/{plan_id}/records"
+)
+def create_maintenance_record(
+    device_id: int,
+    plan_id: int,
+    performed_at: str = Form(...),
+    meter_value: str = Form(""),
+    note: str = Form("")
+):
+
+    connection = sqlite3.connect(DB_PATH)
+    cursor = connection.cursor()
+
+    # URL上のdeviceとplanの組み合わせが正しいか確認
+    cursor.execute("""
+        SELECT id
+        FROM maintenance_plans
+        WHERE id = ?
+        AND device_id = ?
+    """, (
+        plan_id,
+        device_id
+    ))
+
+    plan = cursor.fetchone()
+
+    if plan is None:
+        connection.close()
+
+        raise HTTPException(
+            status_code=404,
+            detail="メンテナンス項目が見つかりません"
+        )
+
+    # 未入力ならNULL
+    meter_value_db = (
+        float(meter_value)
+        if meter_value
+        else None
+    )
+
+    cursor.execute("""
+        INSERT INTO maintenance_records (
+            maintenance_plan_id,
+            performed_at,
+            meter_value,
+            note
+        )
+        VALUES (?, ?, ?, ?)
+    """, (
+        plan_id,
+        performed_at,
+        meter_value_db,
+        note
+    ))
+
+    connection.commit()
+    connection.close()
+
+    return RedirectResponse(
+        url=f"/devices/{device_id}",
+        status_code=303
     )

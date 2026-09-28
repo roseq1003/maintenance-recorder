@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>メンテナンス設定登録</title>
+</head>
+
+<body>
+
+    <h1>メンテナンス設定登録</h1>
+
+    <p>
+        対象機器：{{ device.name }}
+    </p>
+
+    <form
+        method="post"
+        action="/devices/{{ device.id }}/maintenance/new"
+    >
+
+        <p>
+            <label>メンテナンス項目</label><br>
+            <input type="text" name="name" required>
+        </p>
+
+        <p>
+            <label>作業内容</label><br>
+            <input type="text" name="description">
+        </p>
+
+        <p>
+            <label>頻度</label><br>
+            <input type="number" name="interval_value">
+        </p>
+
+        <p>
+            <label>単位</label><br>
+
+            <select name="interval_unit">
+                <option value="day">日</option>
+                <option value="month">か月</option>
+                <option value="year">年</option>
+                <option value="km">km</option>
+                <option value="hour">時間</option>
+                <option value="count">回</option>
+            </select>
+        </p>
+
+        <p>
+            <label>重要度</label><br>
+
+            <select name="priority">
+                <option value="低">低</option>
+                <option value="中">中</option>
+                <option value="高">高</option>
+            </select>
+        </p>
+
+        <button type="submit">
+            登録する
+        </button>
+
+    </form>
+
+    <p>
+        <a href="/devices/{{ device.id }}">
+            機器詳細へ戻る
+        </a>
+    </p>
+
+</body>
+
+</html>

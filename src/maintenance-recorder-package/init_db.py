@@ -23,18 +23,6 @@ cursor = connection.cursor()
 # --------------------------------------------------
 # ③ テーブルを作成
 # --------------------------------------------------
-
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS maintenance (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT,
-        device TEXT,
-        task TEXT,
-        location TEXT,
-        priority TEXT
-    )
-""")
-
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS devices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,26 +34,35 @@ cursor.execute("""
     )
 """)
 
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS maintenance_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        interval_value INTEGER,
+        interval_unit TEXT,
+        priority TEXT,
+        FOREIGN KEY (device_id) REFERENCES devices(id)
+    )
+""")
+
+
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS maintenance_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        maintenance_plan_id INTEGER NOT NULL,
+        performed_at TEXT NOT NULL,
+        meter_value REAL,
+        note TEXT,
+        FOREIGN KEY (maintenance_plan_id)
+            REFERENCES maintenance_plans(id)
+    )
+""")
+
 # --------------------------------------------------
 # ④ とりあえず1件登録
 # --------------------------------------------------
-
-cursor.execute("""
-    INSERT INTO maintenance (
-        date,
-        device,
-        task,
-        location,
-        priority
-    )
-    VALUES (?, ?, ?, ?, ?)
-""", (
-    "2026-09-21",
-    "電動歯ブラシ",
-    "清掃",
-    "さやかの部屋",
-    "低"
-))
 
 cursor.execute("""
     INSERT INTO devices (
@@ -84,15 +81,11 @@ cursor.execute("""
     "2024-05-01"
 ))
 
+
 # --------------------------------------------------
 # ⑤ 変更を確定
 # --------------------------------------------------
 connection.commit()
-
-cursor.execute("""
-    SELECT * FROM maintenance
-""")
-
 
 cursor.execute("""
     SELECT * FROM devices

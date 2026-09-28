@@ -40,6 +40,59 @@
 
     </table>
 
+    <h2>メンテナンス項目</h2>
+
+    <table>
+
+        <thead>
+            <tr>
+                <th>項目</th>
+                <th>内容</th>
+                <th>周期</th>
+                <th>重要度</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            {% for plan in maintenance_plans %}
+
+            <tr>
+                <td>{{ plan.name }}</td>
+                <td>{{ plan.description }}</td>
+                <td>
+                    {{ plan.interval_value }}
+                    {{ plan.interval_unit }}
+                </td>
+                <td>{{ plan.priority }}</td>
+                <td>
+                <a href="/devices/{{ device.id }}/maintenance-plans/{{ plan.id }}/records/new">
+                    実施記録を追加
+                </a>
+            </td>
+            </tr>
+
+            {% else %}
+
+            <tr>
+                <td colspan="4">
+                    メンテナンス項目はまだありません。
+                </td>
+            </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+    </table>
+    
+    <p>
+        <a href="/devices/{{ device.id }}/maintenance/new">
+            メンテナンス項目を追加
+        </a>
+    </p>
+
     <p>
         <a href="/devices">登録機器一覧へ戻る</a>
     </p>
