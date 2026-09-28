@@ -32,6 +32,7 @@
 
         <tbody>
 
+            {# main.pyのcontextにあるdevicesを1件ずつ表示する。device.nameは行のname列。 #}
             {% for device in devices %}
 
             <tr>
@@ -45,6 +46,7 @@
                 <td>{{ device.purchase_date }}</td>
             </tr>
 
+            {# Jinja2のforに付くelseは、繰り返す要素が0件の場合だけ表示される。 #}
             {% else %}
 
             <tr>

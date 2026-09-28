@@ -14,6 +14,8 @@
         メンテナンス項目：{{ plan.name }}
     </p>
 
+    {# 機器IDと項目IDをactionへ埋め込む。サーバー側でも両者の所属関係を確認する。 #}
+    <!-- postは入力値の送信。各入力欄のnameがmain.pyのForm引数に対応する。 -->
     <form
         method="post"
         action="/devices/{{ device_id }}/maintenance-plans/{{ plan.id }}/records"
@@ -21,6 +23,7 @@
 
         <p>
             <label>実施日</label><br>
+            <!-- dateは日付入力欄。送信値はYYYY-MM-DD形式の文字列になる。 -->
             <input
                 type="date"
                 name="performed_at"
@@ -30,6 +33,7 @@
 
         <p>
             <label>メーター値（任意）</label><br>
+            <!-- step="any"で小数を許可する。空欄は保存時にNULLとなり、0とは区別される。 -->
             <input
                 type="number"
                 step="any"

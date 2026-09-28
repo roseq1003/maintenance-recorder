@@ -1,4 +1,4 @@
-/* 全体：幅の計算に、枠線と内側の余白も含めます。 */
+/* * は全要素を選ぶセレクター。border-boxは幅・高さにpaddingとborderも含める指定。 */
 * { box-sizing: border-box; }
 body {
     margin: 0;
@@ -8,17 +8,18 @@ body {
     line-height: 1.6;
 }
 a { color: inherit; }
-button { font: inherit; }
 
 /* ヘッダーとナビゲーション */
 .site-header { padding: 24px 32px; background: #174a7e; color: white; }
 .site-header h1 { margin: 0; font-size: 26px; }
 .site-header p { margin: 6px 0 0; font-size: 14px; }
+/* flexは子要素を横並びにする。wrapで幅が足りない場合の折り返しを許可する。 */
 nav { display: flex; flex-wrap: wrap; padding: 0 24px; background: white; border-bottom: 1px solid #dce3eb; }
-nav a, nav button { padding: 16px 20px; border: 0; border-bottom: 3px solid transparent; background: white; text-decoration: none; }
+nav a { padding: 16px 20px; border: 0; border-bottom: 3px solid transparent; background: white; text-decoration: none; }
+/* [属性="値"] は一致する要素だけを選ぶ。現在のページを示すリンクに適用する。 */
 nav a[aria-current="page"] { color: #174a7e; border-bottom-color: #174a7e; font-weight: bold; }
 nav a:hover { background: #eaf2fb; }
-nav button:disabled { color: #667085; cursor: not-allowed; }
+/* キーボードなどでフォーカスした要素に輪郭を表示し、操作位置を分かるようにする。 */
 :focus-visible { outline: 3px solid #286fc0; outline-offset: 3px; }
 
 /* 本文の最大幅を決め、左右の余白を均等にします。 */
@@ -29,7 +30,8 @@ main { max-width: 1280px; margin: 0 auto; padding: 28px 32px 48px; }
 .sample-note, .section-note { color: #596579; font-size: 14px; }
 .sample-note { margin: 8px 0 24px; }
 
-/* Grid（グリッド）でカードを同じ幅の4列に並べます。 */
+/* repeat(4, ...) は4列の繰り返し。1frは余った幅の1等分、minmax(0, ...)は縮小を許す。
+   gapは項目間の間隔。下のメディアクエリで、狭い画面では列数を減らす。 */
 .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 28px; }
 .card, .panel { background: white; border: 1px solid #dce3eb; border-radius: 10px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03); }
 .card { padding: 20px; }
@@ -70,7 +72,7 @@ tbody tr:hover { background: #f8fafc; }
     .site-header { padding: 20px 16px; }
     .site-header h1 { font-size: 21px; }
     nav { padding: 0 8px; }
-    nav a, nav button { padding: 12px 8px; font-size: 12px; }
+    nav a { padding: 12px 8px; font-size: 12px; }
     main { padding: 20px 16px; }
     .summary { grid-template-columns: 1fr; gap: 12px; }
     .card { padding: 16px; }

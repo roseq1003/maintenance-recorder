@@ -1,26 +1,55 @@
 <!DOCTYPE html>
+{# HTML・Jinja2の読み方TIPS
+   このファイルは、サーバー側でJinja2が処理してからブラウザへ渡すHTMLテンプレート。
+   Pythonから渡された値を埋め込み、ブラウザは完成したHTMLとCSSを使って画面を表示する。
+   この形式のJinja2コメントは配信HTMLには残らない。
+   HTMLコメント（<!-- 説明 -->）は画面には出ないが、ブラウザのソース表示には残る。
+   HTMLコメントの中でもJinja2の構文は処理されるので、テンプレートの説明にはこちらを使う。
+
+   <!DOCTYPE html> はブラウザに標準モードでHTMLを扱わせる宣言。
+   要素の基本形は <タグ名 属性="値">内容</タグ名>。末尾の / は終了タグの印。
+   タグは内側から閉じる。インデントは親子関係を読みやすくするためにそろえる。
+   HTMLの改行・連続した空白は通常まとめて表示されるため、ソースの改行は画面の改行とは別。
+#}
 <html lang="ja">
+{# htmlは文書全体の要素。lang="ja"は主な言語が日本語であることを伝える属性。
+   headは文書の設定、bodyは表示する内容をまとめる。
+   属性は要素に付ける追加情報で、値を引用符で囲むと空白などを含めても区切りが明確になる。 #}
 <head>
+    {# charsetは文字コード。UTF-8で日本語などを扱う。
+       viewportはモバイルでの表示幅と初期倍率の設定。CSSの画面幅判定にも関わる。
+       meta・linkは内容や終了タグを持たない空要素。titleはブラウザのタブなどに使う題名。 #}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>機器メンテナンス管理</title>
-    <!-- /static/ は、main.pyが公開しているCSS・JavaScriptの置き場所です。 -->
-    <link rel="stylesheet" href="/static/style.css"> <!-- HTMLファイルに外部のCSS（スタイルシート）ファイルを読み込ませて、デザインや見た目を適用するための記述 -->
+    <!-- rel="stylesheet" はCSSの読み込み。/static/ はmain.pyで公開したフォルダに対応する。 -->
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+    {# headerは導入部分、navは主要な移動リンク、mainはページの主な内容を表す。
+       これらは見た目だけでなく、文書の役割を伝えるための要素。
+       h1・h2・h3は見出しの階層。文字の大きさだけを理由に選ばず、内容の構造に合わせる。 #}
     <header class="site-header">
         <h1>🔧 機器メンテナンス管理</h1>
         <p>機器の点検予定と、日々のお手入れをひと目で。</p>
     </header>
 
     <nav aria-label="メインナビゲーション">
+        {# aはリンク、hrefは移動先。#から始まる値は同じページのidを指す。
+           /devicesのように/で始まるパスは、このサイトのルートを基準にする。
+           aria-labelは読み上げなどで使う名前、aria-current="page"は現在のページを示す。
+           aria属性は役割や状態を伝えるもので、それ自体で画面遷移を実装するわけではない。 #}
         <a href="#dashboard" aria-current="page">メイン</a>
-        <!-- 画面切り替えはSTEP 2で追加するため、今は操作できない状態です。 -->
+        <!-- #dashboard は同じページ内のidへの移動。/devices はサーバーの別画面への移動。 -->
         <a href="/devices">登録機器一覧</a>
-        <a href="/devices/new">新規機器登録</a>
     </nav>
 
     <main id="dashboard">
+        {# idはページ内で重複させない識別名。リンク先や要素の関連付けに使う。
+           classは複数の要素で共有できる分類名。CSSの .page-heading などに対応する。
+           CSSでidを選ぶ場合は #dashboard のように書く。
+           divは汎用のまとまり、spanは文章中の一部分などを囲む要素。
+           pは段落、smallは注記。見た目の細部はstyle.cssで指定する。 #}
         <div class="page-heading">
             <h2>ダッシュボード</h2>
             <span class="demo-label">サンプル表示</span>
@@ -31,15 +60,23 @@
         <section class="summary" aria-label="登録機器とメンテナンスの集計">
             <div class="card">
                 <h3>登録機器数</h3>
+                {# {{ 式 }} はJinja2の出力記法。device_countはPythonから渡されたint（整数）。
+                   ここで表示用の文字に変換される。HTML自体にPythonの型注釈を書く必要はない。
+                   .htmlテンプレートでは通常、<や&などは文字として表示する形に自動エスケープされる。
+                   TIPS: 入力値に安易に |safe を付けると、この保護を無効にするので注意する。 #}
                 <p>{{ device_count }} <span>台</span></p>
                 <small>登録済み機器の合計</small>
             </div>
             <div class="card">
                 <h3><a href="#this-month">今月のメンテナンス予定</a></h3>
-                <!-- |length は、Pythonから受け取った一覧の件数を数えます。 -->
+                {# | はフィルターを適用する記号。ここではlengthで一覧の件数を数える。
+                   maintenance_listはlist[sqlite3.Row]。空リスト[]なら0を表示する。
+                   現在の一覧は月別の抽出前。見出しだけでは日付の絞り込みは行われない。 #}
                 <p>{{ maintenance_list|length }} <span>件</span></p>
                 <small>2026年9月・期限超過を除く</small>
             </div>
+            {# next_month_list・overdue_list・recent_history は現在main.pyから渡されていない。
+               Jinja2の標準設定では未定義の一覧は0件として表示される。DBの集計結果ではない。 #}
             <div class="card">
                 <h3><a href="#next-month">来月のメンテナンス予定</a></h3>
                 <p>{{ next_month_list|length }} <span>件</span></p>
@@ -53,21 +90,39 @@
         </section>
 
         <section class="panel" id="this-month" aria-labelledby="this-month-title">
+            {# sectionは見出しを持つ話題のまとまり。
+               aria-labelledbyは、名前として使う別要素のidを参照する属性。
+               ここでは直下のh2を参照する。aria-labelは名前そのものを書く点が異なる。 #}
             <h2 id="this-month-title">今月のメンテナンス予定 <span class="count">{{ maintenance_list|length }}件</span></h2>
             <!-- 狭い画面では、この箱の中だけを横にスクロールできます。 -->
             <div class="table-scroll" role="region" aria-label="今月の予定表" tabindex="0">
+                {# role="region"は名前付きの領域として伝える指定。
+                   tabindex="0"は通常のTab移動順でフォーカスできるようにする指定。
+                   横スクロールはこの属性ではなく、CSSのoverflow-x: autoによるもの。
+                   tableは表、theadは見出し部分、tbodyはデータ部分、trは1行。
+                   thは見出しセル、tdはデータセル。scope="col"で列の見出しと明示する。 #}
                 <table>
                     <thead>
                         <tr><th scope="col">実施予定日</th><th scope="col">機器名</th><th scope="col">メンテナンス項目</th><th scope="col">設置場所</th><th scope="col">重要度</th></tr>
                     </thead>
                     <tbody>
-                        <!-- forは、一覧のデータを1件ずつ取り出して行を作る処理です。 -->
+                        {# {% ... %} は繰り返しや分岐などの制御を書くJinja2の記法。
+                           forでmaintenance_listからRowを1件ずつ取り出し、itemという名前で参照する。
+                           item.dateはdate列の値。Jinja2はドット記法で行の列名も参照できる。
+                           Python側のsqlite3.Rowではitem["date"]と書く点に注意する。
+                           endforまでのHTMLが件数分生成される。ブラウザ側でPythonが動くわけではない。
+                           forのelseは一覧が空のときに表示する部分。ifのelseとは役割が異なる。
+                           TIPS: 条件で出し分ける場合は {% if 条件 %} ... {% else %} ... {% endif %}。 #}
                         {% for item in maintenance_list %}
                         <tr>
                             <td>{{ item.date }}</td><td>{{ item.device }}</td><td>{{ item.task }}</td><td>{{ item.location }}</td>
+                            {# data-*は独自のデータを要素に付ける属性。ここでは重要度を文字列で埋め込む。
+                               CSSの .priority[data-level="高"] などがこの値に応じて色を指定する。
+                               色だけに頼らず、spanの中にも重要度の文字を表示する。 #}
                             <td><span class="priority" data-level="{{ item.priority }}">{{ item.priority }}</span></td>
                         </tr>
                         {% else %}
+                        {# colspan="5"はこのセルで5列分を占める指定。上の見出しセルの数に合わせる。 #}
                         <tr><td colspan="5" class="empty-state">今月の予定はありません。</td></tr>
                         {% endfor %}
                     </tbody>
@@ -138,6 +193,5 @@
             </div>
         </section>
     </main>
-    <script src="/static/app.js"></script>
 </body>
 </html>

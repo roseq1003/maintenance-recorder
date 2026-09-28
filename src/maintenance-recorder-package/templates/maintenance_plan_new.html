@@ -14,6 +14,8 @@
         対象機器：{{ device.name }}
     </p>
 
+    {# actionは送信先URL、method="post"は入力内容をリクエスト本文で送る指定。
+       device.idをURLに埋め込み、どの機器に追加する項目かをサーバーへ伝える。 #}
     <form
         method="post"
         action="/devices/{{ device.id }}/maintenance/new"
@@ -21,6 +23,7 @@
 
         <p>
             <label>メンテナンス項目</label><br>
+            <!-- name属性はmain.pyの引数名に対応する。requiredはブラウザ側の必須入力チェック。 -->
             <input type="text" name="name" required>
         </p>
 
@@ -31,12 +34,14 @@
 
         <p>
             <label>頻度</label><br>
-            <input type="number" name="interval_value">
+            <!-- サーバー側では整数の必須項目として受け取る。 -->
+            <input type="number" name="interval_value" required>
         </p>
 
         <p>
             <label>単位</label><br>
 
+            <!-- 画面には「日」などを表示し、送信時にはvalueのdayなどを使う。 -->
             <select name="interval_unit">
                 <option value="day">日</option>
                 <option value="month">か月</option>
