@@ -132,3 +132,13 @@ td { overflow-wrap: anywhere; }
 
 .item-edit-action { margin-top: 12px; }
 .summary .card h2 { margin: 0; font-size: 14px; }
+
+/* 機器内のページ切り替え。QR画像は縦横比を保ち、スマートフォンの幅にも収める。 */
+.device-tabs { padding: 0; margin: 0 0 24px; background: transparent; }
+.device-tabs a { background: transparent; }
+.qr-output { max-width: 640px; }
+.qr-output h2 { font-size: 20px; margin: 0 0 16px; }
+.device-qr { display: block; width: 320px; max-width: 100%; height: auto; aspect-ratio: 1; image-rendering: pixelated; }
+.qr-destination { margin: 20px 0; }
+.qr-destination dt { font-size: 14px; color: #596579; }
+.qr-destination dd { margin: 6px 0 0; overflow-wrap: anywhere; }

@@ -1,0 +1,5 @@
+{# リンクでページを切り替えるタブ。aria-currentで現在表示しているページを伝える。 #}
+<nav class="device-tabs" aria-label="機器の表示切り替え">
+    <a href="/devices/{{ device.id }}" {% if request.url.path.endswith('/' ~ device.id) %}aria-current="page"{% endif %}>機器詳細</a>
+    <a href="/devices/{{ device.id }}/qr" {% if request.url.path.endswith('/qr') %}aria-current="page"{% endif %}>QR出力</a>
+</nav>

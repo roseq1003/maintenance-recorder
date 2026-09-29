@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}{{ device.name }} - QR出力{% endblock %}
+{% block content %}
+<a class="back-link" href="/devices">← 機器一覧へ戻る</a>
+<div class="page-heading"><h1>{{ device.name }}</h1></div>
+{% include '_device_tabs.html' %}
+<section class="qr-output" aria-labelledby="qr-heading">
+    <h2 id="qr-heading">QR出力</h2>
+    {# srcは画像取得先。QRに格納するURLはサーバー側で機器詳細に固定して生成する。 #}
+    <img class="device-qr" src="{{ request.url_for('device_qr_image', device_id=device.id) }}"
+         alt="{{ device.name }}の機器詳細を開くQRコード" width="320" height="320">
+    <dl class="qr-destination"><dt>読み取り先URL</dt><dd><a href="{{ target_url }}">{{ target_url }}</a></dd></dl>
+    {% if local_only %}
+    <p class="form-error">このURLは、この端末内からのみアクセスできます。スマートフォンで使う場合は、同じネットワークから接続できるPCのIPアドレスまたは公開URLで開き直してください。</p>
+    {% endif %}
+    <div class="actions">
+        <a class="button primary" href="{{ request.url_for('device_qr_image', device_id=device.id) }}?download=true" download="device-{{ device.id }}-qr.png">PNGを保存</a>
+    </div>
+</section>
+{% endblock %}

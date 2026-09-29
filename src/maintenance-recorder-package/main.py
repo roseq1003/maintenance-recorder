@@ -4,14 +4,19 @@ from contextlib import contextmanager, asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from calendar import monthrange
 import math
+import json
+from io import BytesIO
 from pathlib import Path
 import sqlite3
+import qrcode
+from qrcode.exceptions import DataOverflowError
 from typing import Annotated, Iterator, Optional
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import http_exception_handler
 
@@ -36,6 +41,7 @@ app = FastAPI(lifespan=lifespan)
 # 起動した場所に左右されないよう、DB・HTML・CSSの場所を main.py 基準で指定する。
 BASE_DIR: Path = Path(__file__).resolve().parent
 DB_PATH: Path = BASE_DIR / "maintenance.db"
+QR_CONFIG_PATH: Path = BASE_DIR / "config" / "default.json"
 
 # /static/... へのリクエストを static フォルダ内のファイルに対応付ける。
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -269,6 +275,73 @@ def device_detail(request: Request, device_id: int) -> HTMLResponse:
             "maintenance_records": maintenance_records
         }
     )
+
+
+def device_qr_target(request: Request, device_id: int) -> str:
+    """画面の接続先とは別に、設定したサーバーの機器詳細URLを組み立てる。"""
+    # JSONのオブジェクトをdictとして読み込む。都度読むため設定変更だけなら再起動は不要。
+    with QR_CONFIG_PATH.open(encoding="utf-8") as config_file:
+        config: dict = json.load(config_file)
+    base_url = config.get("qr_base_url", "")
+    if not isinstance(base_url, str):
+        raise HTTPException(status_code=503, detail="qr_base_urlにはURLの文字列を設定してください")
+    base_url = base_url.strip().rstrip("/")
+    if not base_url:
+        # 空文字なら従来どおり、閲覧しているホスト・ポートを使う。
+        return str(request.url_for("device_detail", device_id=device_id))
+    try:
+        parts = urlsplit(base_url)
+        valid = (parts.scheme in ("http", "https") and parts.hostname
+                 and parts.username is None and parts.password is None
+                 and not parts.query and not parts.fragment)
+        parts.port  # 不正なポート番号の場合もValueErrorとして検出する。
+    except ValueError:
+        valid = False
+    if not valid:
+        raise HTTPException(status_code=503, detail="qr_base_urlに有効なHTTP(S)のサーバーURLを設定してください")
+    # url_path_for()はホストを含まないパスを返す。機器IDは現在の機器のものを使う。
+    return base_url + str(app.url_path_for("device_detail", device_id=device_id))
+
+
+@app.get("/devices/{device_id}/qr")
+def device_qr(request: Request, device_id: int) -> HTMLResponse:
+    """機器詳細へのURLと、そのURLを格納したQRコードを表示する。"""
+    with database() as connection:
+        device: Optional[sqlite3.Row] = connection.execute(
+            "SELECT id, name FROM devices WHERE id = ?", (device_id,)
+        ).fetchone()
+    if device is None:
+        raise HTTPException(status_code=404, detail="機器が見つかりません")
+
+    # 表示するURLと画像に格納するURLは、同じ関数で決定して一致させる。
+    target_url: str = device_qr_target(request, device_id)
+    return templates.TemplateResponse(request=request, name="device_qr.html", context={
+        "device": device, "target_url": target_url,
+        "local_only": urlsplit(target_url).hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0"),
+    })
+
+
+@app.get("/devices/{device_id}/qr.png")
+def device_qr_image(request: Request, device_id: int, download: bool = False) -> Response:
+    """QR画像をPNGで返す。download=trueの場合はファイル保存用のヘッダーを付ける。"""
+    with database() as connection:
+        require_device(connection, device_id)
+    target_url: str = device_qr_target(request, device_id)
+    # QRCodeは符号化を担当するライブラリのオブジェクト。borderは読み取りに必要な白い余白。
+    qr: qrcode.QRCode = qrcode.QRCode(box_size=10, border=4)
+    qr.add_data(target_url)
+    try:
+        qr.make(fit=True)
+    except DataOverflowError:
+        raise HTTPException(status_code=422, detail="URLが長すぎるためQRコードを生成できません")
+    # BytesIOはメモリー上のバイナリ保存先。DBやディスクに画像ファイルを残さない。
+    buffer: BytesIO = BytesIO()
+    qr.make_image(fill_color="black", back_color="white").save(buffer, format="PNG")
+    disposition: str = "attachment" if download else "inline"
+    return Response(content=buffer.getvalue(), media_type="image/png", headers={
+        "Content-Disposition": f'{disposition}; filename="device-{device_id}-qr.png"',
+        "Cache-Control": "no-store",
+    })
 
 
 @app.get("/devices/{device_id}/maintenance/new")

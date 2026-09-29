@@ -3,6 +3,7 @@
 {% block content %}
 <a class="back-link" href="/devices">← 機器一覧へ戻る</a>
 <div class="page-heading"><h1>{{ device.name }}</h1><span class="status-badge" data-status="{{ device.status }}">{{ device.status }}</span></div>
+{% include '_device_tabs.html' %}
 <p class="muted">定期メンテナンス：{{ device.maintenance_scope }}{% if device.maintenance_scope == '対象' and not maintenance_plans %}（項目未登録）{% endif %}</p>
 {% if request.query_params.get('saved') in ['device', 'plan', 'record', 'deleted'] %}
 <p class="save-notice" role="status">{{ '実施記録を削除しました。' if request.query_params.get('saved') == 'deleted' else '変更を保存しました。' }}</p>
