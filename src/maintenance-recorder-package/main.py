@@ -162,10 +162,33 @@ def device_detail(request: Request, device_id: int) -> HTMLResponse:
         # 1つの機器に複数の項目があるため、単一のRowではなくlist[Row]で受け取る。
         maintenance_plans: list[sqlite3.Row] = cursor.fetchall()
 
+        cursor = connection.execute("""
+            SELECT
+                maintenance_records.id,
+                maintenance_records.maintenance_plan_id,
+                maintenance_records.performed_at,
+                maintenance_records.meter_value,
+                maintenance_records.note
+            FROM maintenance_records
+            JOIN maintenance_plans
+                ON maintenance_plans.id
+                = maintenance_records.maintenance_plan_id
+            WHERE maintenance_plans.device_id = ?
+            ORDER BY
+                maintenance_records.performed_at DESC,
+                maintenance_records.id DESC
+        """, (device_id,))
+
+        maintenance_records = cursor.fetchall()
+
     return templates.TemplateResponse(
         request=request,
         name="device_detail.html",
-        context={"device": device, "maintenance_plans": maintenance_plans}
+        context={
+            "device": device,
+            "maintenance_plans": maintenance_plans,
+            "maintenance_records": maintenance_records
+        }
     )
 
 

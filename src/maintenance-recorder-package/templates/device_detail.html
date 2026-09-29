@@ -6,7 +6,7 @@
     <title>{{ device.name }} - 機器詳細</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
-
+<script src="/static/app.js"></script>
 <body>
 
     <h1>{{ device.name }}</h1>
@@ -67,10 +67,51 @@
                 </td>
                 <td>{{ plan.priority }}</td>
                 <td>
-                <a href="/devices/{{ device.id }}/maintenance-plans/{{ plan.id }}/records/new">
-                    実施記録を追加
-                </a>
-            </td>
+                    <a href="/devices/{{ device.id }}/maintenance-plans/{{ plan.id }}/records/new">
+                        実施記録を追加
+                    </a>
+
+                    <button
+                        type="button"
+                        onclick="toggleHistory('history-{{ plan.id }}')"
+                    >
+                        履歴を見る
+                    </button>
+                </td>
+            </tr>
+            <tr
+                id="history-{{ plan.id }}"
+                style="display: none;"
+            >
+                <td colspan="5">
+
+                    <strong>実施履歴</strong>
+
+                    <ul>
+
+                        {% for record in maintenance_records %}
+
+                            {% if record.maintenance_plan_id == plan.id %}
+
+                                <li>
+                                    {{ record.performed_at }}
+
+                                    {% if record.meter_value is not none %}
+                                        / {{ record.meter_value }}
+                                    {% endif %}
+
+                                    {% if record.note %}
+                                        / {{ record.note }}
+                                    {% endif %}
+                                </li>
+
+                            {% endif %}
+
+                        {% endfor %}
+
+                    </ul>
+
+                </td>
             </tr>
 
             {% else %}
@@ -101,6 +142,7 @@
         <a href="/">トップへ戻る</a>
     </p>
 
-</body>
+    <script src="/static/app.js"></script>
 
+</body>
 </html>
