@@ -34,7 +34,7 @@ def database() -> Iterator[sqlite3.Connection]:
     # Row を使うと、列番号ではなく列名で値を参照できる。
     # Jinja2 でも device.name のように参照できるため、辞書への詰め直しは不要。
     connection.row_factory = sqlite3.Row
-    # Rowは辞書そのものではない。Pythonではrow["name"]またはrow[0]で値を取り出す。
+    # Rowは辞書そのものではない。Pythonではrow["name"]またはrow[0]で値を取り出す。ここはwiki(jinja2とSQlite3を使うときの割と便利なtips)で詳細書いている。
     # 標準のrow_factoryでは1行はtuple。この設定以降に作るカーソルではRowになる。
     try:
         # Connection の with はトランザクションを管理するが、接続自体は閉じない。
@@ -48,6 +48,7 @@ def database() -> Iterator[sqlite3.Connection]:
 
 # @ はデコレータの記法。ここでは GET / を処理する関数として home を登録する。
 # GET は画面の取得、POST はフォームから送られたデータの保存に使う。
+# デコレータと関数の解説：① home関数を作る② app.get("/") を実行する③ ②で返ってきたデコレータにhome関数そのものを渡す④ デコレータ側で何らかの処理をする
 @app.get("/")
 def home(request: Request) -> HTMLResponse:
     """登録機器数と、既存の maintenance テーブルの一覧を表示する。"""
@@ -63,9 +64,11 @@ def home(request: Request) -> HTMLResponse:
         # fetchall()はカーソルに残っている全行を取得するメソッド（オブジェクトの関数）。
         # list[sqlite3.Row]は「各要素がRowであるリスト」。0件なら空リスト[]になる。
         # 各行にはSELECTしたid・date・device・task・location・priorityの列が入る。
+        # ののsqlite3.rowはタプルっぽい見た目になるけどタプルではない。列名からもアクセスできることから辞書への詰めなおしが不要になる。
         maintenance_list: list[sqlite3.Row] = cursor.fetchall()
 
         # COUNT(*) の結果は1行1列。fetchone() で行、[0] で先頭列の値を得る。
+        # 基本的に1行1列(5,)みたいなのが返ってくる。
         cursor = connection.execute("SELECT COUNT(*) FROM devices")
         # GROUP BYのないCOUNT(*)は、対象が0件でも値0の行を1つ返す。
         # そのため、このSQLではfetchone()がNoneになることはない。
@@ -203,6 +206,7 @@ def create_maintenance_plan(
         """, (device_id, name, description, interval_value, interval_unit, priority))
 
     # f"..." は文字列内の {式} を値に置き換える、f文字列の記法。
+    # 処理が終わったあと、ブラウザに「次は /devices/{device_id} を開いてね」としている。303 は HTTP ステータスコードで、特にフォーム送信後によく使い、ブラウザに「次は GET で開いてね」と指示する意味がある。
     return RedirectResponse(url=f"/devices/{device_id}", status_code=303)
 
 
