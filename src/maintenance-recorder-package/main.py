@@ -1,19 +1,36 @@
 """機器・メンテナンス項目・実施記録の画面表示とフォーム保存を担当する。"""
 
-from contextlib import contextmanager
+from contextlib import contextmanager, asynccontextmanager
+from datetime import date, datetime, timedelta, timezone
+from calendar import monthrange
+import math
 from pathlib import Path
 import sqlite3
-from typing import Iterator, Optional
+from typing import Annotated, Iterator, Optional
 
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import http_exception_handler
 
 
 # 「変数名: 型 = 値」は型注釈付きの代入。型注釈だけで値が変換されるわけではない。
 # strは文字列、intは整数、floatは小数を扱う数値。エディターで型を確認する目印にもなる。
-app: FastAPI = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 単独モジュールとしての起動・パッケージ経由の起動の両方に対応。
+    if __package__:
+        from .init_db import init_db
+    else:
+        from init_db import init_db
+    # 画面が読み書きするDBと、初期化するDBを一致させる。
+    init_db(DB_PATH)
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 # __file__ はこのファイルのパス。resolve() で絶対パスにし、parent で親フォルダを得る。
 # 起動した場所に左右されないよう、DB・HTML・CSSの場所を main.py 基準で指定する。
@@ -23,6 +40,22 @@ DB_PATH: Path = BASE_DIR / "maintenance.db"
 # /static/... へのリクエストを static フォルダ内のファイルに対応付ける。
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates: Jinja2Templates = Jinja2Templates(directory=BASE_DIR / "templates")
+UNITS = {"day": "日", "month": "か月", "year": "年",
+         "km": "km", "hour": "時間", "count": "回"}
+PRIORITIES = {"低": "低", "中": "中", "高": "高",
+              "low": "低", "medium": "中", "high": "高"}
+STATUSES = ("稼働中", "休止中", "故障中", "廃止")
+SCOPES = ("対象", "非該当", "未設定")
+
+
+def asset_url(filename: str) -> str:
+    # 更新したCSS/JSをブラウザーが古いキャッシュで表示しないようにする。
+    version = (BASE_DIR / "static" / filename).stat().st_mtime_ns
+    return f"/static/{filename}?v={version}"
+
+
+templates.env.globals.update(units=UNITS, priorities=PRIORITIES,
+                             statuses=STATUSES, scopes=SCOPES, asset_url=asset_url)
 
 
 @contextmanager
@@ -46,43 +79,83 @@ def database() -> Iterator[sqlite3.Connection]:
         connection.close()
 
 
-# @ はデコレータの記法。ここでは GET / を処理する関数として home を登録する。
-# GET は画面の取得、POST はフォームから送られたデータの保存に使う。
-# デコレータと関数の解説：① home関数を作る② app.get("/") を実行する③ ②で返ってきたデコレータにhome関数そのものを渡す④ デコレータ側で何らかの処理をする
+def today() -> date:
+    """日本時間の今日。テストではこの関数だけを固定する。"""
+    return datetime.now(timezone(timedelta(hours=9))).date()
+
+
+def next_date(base: date, value: int, unit: str) -> date:
+    if unit == "day":
+        return base + timedelta(days=value)
+    months = value * 12 if unit == "year" else value
+    year, month = divmod(base.year * 12 + base.month - 1 + months, 12)
+    month += 1
+    return date(year, month, min(base.day, monthrange(year, month)[1]))
+
+
+def scheduled_date(plan) -> Optional[date]:
+    """最新実施日＋周期。未実施なら初回予定日を使う。"""
+    if plan["interval_unit"] not in ("day", "month", "year"):
+        return None
+    try:
+        value = int(plan["interval_value"])
+        if value < 1:
+            return None
+        if plan["last_performed"]:
+            return next_date(date.fromisoformat(plan["last_performed"]), value, plan["interval_unit"])
+        return date.fromisoformat(plan["first_due_date"]) if plan["first_due_date"] else None
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 @app.get("/")
 def home(request: Request) -> HTMLResponse:
-    """登録機器数と、既存の maintenance テーブルの一覧を表示する。"""
+    current = today()
+    next_month = next_date(current.replace(day=1), 1, "month")
+    following_month = next_date(next_month, 1, "month")
     with database() as connection:
-        # 三重引用符は複数行の文字列。SQLを読みやすく改行して記述できる。
-        # この一覧はまだ日付で絞り込んでいない。月別・期限超過の判定は未実装。
-        # connectionはDB接続、cursorはSQLの実行結果から行を取り出すオブジェクト。
-        # execute()の戻り値はCursorであり、行のリストそのものではない。
-        cursor: sqlite3.Cursor = connection.execute("""
-            SELECT id, date, device, task, location, priority
-            FROM maintenance
-        """)
-        # fetchall()はカーソルに残っている全行を取得するメソッド（オブジェクトの関数）。
-        # list[sqlite3.Row]は「各要素がRowであるリスト」。0件なら空リスト[]になる。
-        # 各行にはSELECTしたid・date・device・task・location・priorityの列が入る。
-        # ののsqlite3.rowはタプルっぽい見た目になるけどタプルではない。列名からもアクセスできることから辞書への詰めなおしが不要になる。
-        maintenance_list: list[sqlite3.Row] = cursor.fetchall()
-
-        # COUNT(*) の結果は1行1列。fetchone() で行、[0] で先頭列の値を得る。
-        # 基本的に1行1列(5,)みたいなのが返ってくる。
-        cursor = connection.execute("SELECT COUNT(*) FROM devices")
-        # GROUP BYのないCOUNT(*)は、対象が0件でも値0の行を1つ返す。
-        # そのため、このSQLではfetchone()がNoneになることはない。
-        device_count: int = cursor.fetchone()[0]
-
-    # requestはRequest型のアクセス情報。contextは「名前: 値」の組を持つdict（辞書）。
-    # キーがHTML内の変数名となり、値にはintやlist[Row]など異なる型を渡せる。
-    # TemplateResponse()はHTMLResponseを継承したレスポンスを返す。HTML文字列そのものではない。
-    return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={"device_count": device_count,
-                 "maintenance_list": maintenance_list}
-    )
+        device_count = connection.execute(
+            "SELECT COUNT(*) FROM devices").fetchone()[0]
+        plans = connection.execute("""
+            SELECT p.*, d.name AS device, d.location,
+                   (SELECT MAX(r.performed_at) FROM maintenance_records r
+                    WHERE r.maintenance_plan_id = p.id) AS last_performed
+            FROM maintenance_plans p JOIN devices d ON d.id = p.device_id
+            WHERE d.status = '稼働中' AND d.maintenance_scope != '非該当'
+            ORDER BY p.id
+        """).fetchall()
+        recent_history = connection.execute("""
+            SELECT r.*, p.name AS task, d.name AS device, d.id AS device_id
+            FROM maintenance_records r
+            JOIN maintenance_plans p ON p.id = r.maintenance_plan_id
+            JOIN devices d ON d.id = p.device_id
+            ORDER BY r.performed_at DESC, r.id DESC LIMIT 20
+        """).fetchall()
+    maintenance_list, next_month_list, overdue_list, undated_list = [], [], [], []
+    for plan in plans:
+        item = dict(plan)
+        due = scheduled_date(plan)
+        if due is None:
+            item["reason"] = ("日付では管理しない周期" if plan["interval_unit"] in ("km", "hour", "count")
+                              else "初回予定日・周期を確認してください")
+            undated_list.append(item)
+            continue
+        item["date"] = due.isoformat()
+        if due < current:
+            overdue_list.append(item)
+        elif due < next_month:
+            maintenance_list.append(item)
+        elif due < following_month:
+            next_month_list.append(item)
+    for items in (maintenance_list, next_month_list, overdue_list):
+        items.sort(key=lambda item: (item["date"], item["id"]))
+    return templates.TemplateResponse(request=request, name="index.html", context={
+        "device_count": device_count, "maintenance_list": maintenance_list,
+        "next_month_list": next_month_list, "overdue_list": overdue_list,
+        "undated_list": undated_list, "recent_history": recent_history,
+        "this_month": f"{current.year}年{current.month}月",
+        "next_month": f"{next_month.year}年{next_month.month}月",
+    })
 
 
 @app.get("/devices")
@@ -91,7 +164,8 @@ def device_list(request: Request) -> HTMLResponse:
     with database() as connection:
         # execute() はカーソルを返すため、別途 cursor() を作らず結果を取得できる。
         cursor: sqlite3.Cursor = connection.execute("""
-            SELECT id, name, manufacturer, model_number, location, purchase_date
+            SELECT id, name, manufacturer, model_number, location, purchase_date,
+                   note, status, maintenance_scope
             FROM devices
             ORDER BY id
         """)
@@ -118,18 +192,22 @@ def create_device(
     manufacturer: str = Form(""),
     model_number: str = Form(""),
     location: str = Form(""),
-    purchase_date: str = Form("")
+    purchase_date: str = Form(""),
+    note: Annotated[str, Form()] = "",
+    status: Annotated[str, Form()] = "稼働中",
+    maintenance_scope: Annotated[str, Form()] = "未設定"
 ) -> RedirectResponse:
     """機器登録フォームの値を保存し、トップページへ戻す。"""
     # : str は型注釈。FastAPI は型と Form の指定を使って入力を受け取り検証する。
     # Form(...) は必須、Form("") は省略時に空文字列を使う指定。
+    validate_device(name, purchase_date, status, maintenance_scope)
     with database() as connection:
         # ? は値を後から渡すプレースホルダ。SQLに入力文字列を直接連結しない。
         # 第2引数のタプルの値を、左から順に各 ? へ割り当てる。
         connection.execute("""
-            INSERT INTO devices (name, manufacturer, model_number, location, purchase_date)
-            VALUES (?, ?, ?, ?, ?)
-        """, (name, manufacturer, model_number, location, purchase_date))
+            INSERT INTO devices (name, manufacturer, model_number, location, purchase_date, note, status, maintenance_scope)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (name.strip(), manufacturer, model_number, location, purchase_date, note, status, maintenance_scope))
 
     # 303 は保存後の移動先を GET で取得させる。再読み込みによる再送信を避ける。
     return RedirectResponse(url="/", status_code=303)
@@ -141,7 +219,8 @@ def device_detail(request: Request, device_id: int) -> HTMLResponse:
     # URLの {device_id} が引数に入る。int の指定により整数以外は検証エラーになる。
     with database() as connection:
         cursor: sqlite3.Cursor = connection.execute("""
-            SELECT id, name, manufacturer, model_number, location, purchase_date
+            SELECT id, name, manufacturer, model_number, location, purchase_date,
+                   note, status, maintenance_scope
             FROM devices
             WHERE id = ?
         """, (device_id,))
@@ -154,7 +233,7 @@ def device_detail(request: Request, device_id: int) -> HTMLResponse:
         # Noneなら上で処理を終了するため、ここから先のdeviceはRowとして使える。
 
         cursor = connection.execute("""
-            SELECT id, device_id, name, description, interval_value, interval_unit, priority
+            SELECT id, device_id, name, description, interval_value, interval_unit, priority, first_due_date
             FROM maintenance_plans
             WHERE device_id = ?
             ORDER BY id
@@ -217,20 +296,139 @@ def create_maintenance_plan(
     description: str = Form(""),
     interval_value: int = Form(...),
     interval_unit: str = Form(...),
-    priority: str = Form(...)
+    priority: str = Form(...),
+    first_due_date: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
-    """周期・単位・重要度を機器にひも付けて保存する。次回予定日は計算しない。"""
+    """周期と初回予定日を機器にひも付けて保存する。"""
+    validate_plan(name, interval_value, interval_unit, priority)
+    validate_date(first_due_date, "初回予定日")
     with database() as connection:
+        require_device(connection, device_id)
         connection.execute("""
             INSERT INTO maintenance_plans (
-                device_id, name, description, interval_value, interval_unit, priority
+                device_id, name, description, interval_value, interval_unit, priority, first_due_date
             )
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (device_id, name, description, interval_value, interval_unit, priority))
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (device_id, name, description, interval_value, interval_unit, priority, first_due_date))
 
     # f"..." は文字列内の {式} を値に置き換える、f文字列の記法。
     # 処理が終わったあと、ブラウザに「次は /devices/{device_id} を開いてね」としている。303 は HTTP ステータスコードで、特にフォーム送信後によく使い、ブラウザに「次は GET で開いてね」と指示する意味がある。
     return RedirectResponse(url=f"/devices/{device_id}", status_code=303)
+
+
+def validate_date(value: str, label: str, required: bool = False) -> None:
+    if not value and not required:
+        return
+    try:
+        if date.fromisoformat(value).isoformat() != value:
+            raise ValueError
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"{label}を正しい日付で入力してください")
+
+
+def validate_device(name: str, purchase_date: str, status: str, scope: str) -> None:
+    if not name.strip():
+        raise HTTPException(status_code=422, detail="機器名を入力してください")
+    validate_date(purchase_date, "購入日")
+    if status not in STATUSES or scope not in SCOPES:
+        raise HTTPException(status_code=422, detail="状態とメンテナンス区分を選択してください")
+
+
+def validate_plan(name: str, interval_value: int, interval_unit: str, priority: str) -> None:
+    if not name.strip() or interval_value < 1 or interval_unit not in UNITS or priority not in PRIORITIES:
+        raise HTTPException(
+            status_code=422, detail="項目名・1以上の周期・単位・重要度を確認してください")
+
+
+def validate_record(performed_at: str, meter_value: str) -> Optional[float]:
+    validate_date(performed_at, "実施日", required=True)
+    try:
+        value = float(meter_value) if meter_value.strip() else None
+        if value is not None and (not math.isfinite(value) or value < 0):
+            raise ValueError
+        return value
+    except ValueError:
+        raise HTTPException(status_code=422, detail="メーター値は0以上の数値で入力してください")
+
+
+def require_device(connection: sqlite3.Connection, device_id: int) -> None:
+    if not connection.execute("SELECT id FROM devices WHERE id = ?", (device_id,)).fetchone():
+        raise HTTPException(status_code=404, detail="機器が見つかりません")
+
+
+@app.post("/devices/{device_id}/edit")
+def update_device(
+    device_id: int,
+    name: str = Form(...),
+    manufacturer: str = Form(""),
+    model_number: str = Form(""),
+    location: str = Form(""),
+    purchase_date: str = Form(""),
+    note: str = Form(""),
+    status: str = Form(...),
+    maintenance_scope: str = Form(...)
+) -> RedirectResponse:
+    validate_device(name, purchase_date, status, maintenance_scope)
+    with database() as connection:
+        require_device(connection, device_id)
+        connection.execute("""
+            UPDATE devices SET name = ?, manufacturer = ?, model_number = ?, location = ?,
+                purchase_date = ?, note = ?, status = ?, maintenance_scope = ? WHERE id = ?
+        """, (name.strip(), manufacturer, model_number, location, purchase_date,
+              note, status, maintenance_scope, device_id))
+    return RedirectResponse(url=f"/devices/{device_id}?saved=device#device-info", status_code=303)
+
+
+@app.post("/devices/{device_id}/maintenance-plans/{plan_id}/edit")
+def update_maintenance_plan(
+    device_id: int, plan_id: int,
+    name: str = Form(...), description: str = Form(""),
+    interval_value: int = Form(...), interval_unit: str = Form(...), priority: str = Form(...),
+    first_due_date: Annotated[str, Form()] = ""
+) -> RedirectResponse:
+    validate_plan(name, interval_value, interval_unit, priority)
+    validate_date(first_due_date, "初回予定日")
+    with database() as connection:
+        cursor = connection.execute("""
+            UPDATE maintenance_plans SET name = ?, description = ?, interval_value = ?,
+                interval_unit = ?, priority = ?, first_due_date = ? WHERE id = ? AND device_id = ?
+        """, (name.strip(), description, interval_value, interval_unit, priority, first_due_date, plan_id, device_id))
+        if cursor.rowcount != 1:
+            raise HTTPException(status_code=404, detail="メンテナンス項目が見つかりません")
+    return RedirectResponse(url=f"/devices/{device_id}?saved=plan#plan-{plan_id}", status_code=303)
+
+
+def require_record(connection: sqlite3.Connection, device_id: int, plan_id: int, record_id: int) -> None:
+    record = connection.execute("""
+        SELECT r.id FROM maintenance_records r
+        JOIN maintenance_plans p ON p.id = r.maintenance_plan_id
+        WHERE r.id = ? AND p.id = ? AND p.device_id = ?
+    """, (record_id, plan_id, device_id)).fetchone()
+    if record is None:
+        raise HTTPException(status_code=404, detail="実施記録が見つかりません")
+
+
+@app.post("/devices/{device_id}/maintenance-plans/{plan_id}/records/{record_id}/edit")
+def update_maintenance_record(
+    request: Request, device_id: int, plan_id: int, record_id: int,
+    performed_at: str = Form(...), meter_value: str = Form(""), note: str = Form("")
+) -> RedirectResponse:
+    value = validate_record(performed_at, meter_value)
+    with database() as connection:
+        require_record(connection, device_id, plan_id, record_id)
+        connection.execute("""
+            UPDATE maintenance_records SET performed_at = ?, meter_value = ?, note = ? WHERE id = ?
+        """, (performed_at, value, note, record_id))
+    return RedirectResponse(url=f"/devices/{device_id}?saved=record#record-{record_id}", status_code=303)
+
+
+@app.post("/devices/{device_id}/maintenance-plans/{plan_id}/records/{record_id}/delete")
+def delete_maintenance_record(request: Request, device_id: int, plan_id: int, record_id: int) -> RedirectResponse:
+    with database() as connection:
+        require_record(connection, device_id, plan_id, record_id)
+        connection.execute(
+            "DELETE FROM maintenance_records WHERE id = ?", (record_id,))
+    return RedirectResponse(url=f"/devices/{device_id}?saved=deleted#plan-{plan_id}", status_code=303)
 
 
 @app.get("/devices/{device_id}/maintenance-plans/{plan_id}/records/new")
@@ -264,6 +462,7 @@ def create_maintenance_record(
     note: str = Form("")
 ) -> RedirectResponse:
     """実施日・任意のメーター値・備考をメンテナンス項目にひも付けて保存する。"""
+    meter_value_db = validate_record(performed_at, meter_value)
     with database() as connection:
         # POSTだけを直接送ることも可能なので、入力画面と同じ所属確認を行う。
         cursor: sqlite3.Cursor = connection.execute("""
@@ -279,11 +478,87 @@ def create_maintenance_record(
         # 数値の 0 と未入力を区別するため、文字列として受け取ってから float に変換する。
         # 入力"12.5"（str）は12.5（float）へ、空文字列はNoneへ変わる。
         # Optional[float]は「floatまたはNone」。実施日のperformed_atはstrのまま保存する。
-        meter_value_db: Optional[float] = float(
-            meter_value) if meter_value else None
         connection.execute("""
             INSERT INTO maintenance_records (maintenance_plan_id, performed_at, meter_value, note)
             VALUES (?, ?, ?, ?)
         """, (plan_id, performed_at, meter_value_db, note))
 
     return RedirectResponse(url=f"/devices/{device_id}", status_code=303)
+
+
+def render_edit_form(request: Request, kind: str, values, back: str, error: str = "", status_code: int = 200):
+    labels = {"device": "機器情報を編集", "plan": "メンテナンス項目を編集", "record": "実施記録を編集"}
+    return templates.TemplateResponse(request=request, name="edit.html", context={
+        "kind": kind, "values": values, "back": back, "heading": labels[kind],
+        "form_action": request.url.path, "error": error,
+    }, status_code=status_code)
+
+
+@app.get("/devices/{device_id}/edit")
+def device_edit(request: Request, device_id: int):
+    with database() as connection:
+        require_device(connection, device_id)
+        device = connection.execute(
+            "SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+    return render_edit_form(request, "device", device, f"/devices/{device_id}")
+
+
+@app.get("/devices/{device_id}/maintenance-plans/{plan_id}/edit")
+def plan_edit(request: Request, device_id: int, plan_id: int):
+    with database() as connection:
+        plan = connection.execute(
+            "SELECT * FROM maintenance_plans WHERE id = ? AND device_id = ?", (plan_id, device_id)).fetchone()
+    if plan is None:
+        raise HTTPException(status_code=404, detail="メンテナンス項目が見つかりません")
+    return render_edit_form(request, "plan", plan, f"/devices/{device_id}#plan-{plan_id}")
+
+
+@app.get("/devices/{device_id}/maintenance-plans/{plan_id}/records/{record_id}/edit")
+def record_edit(request: Request, device_id: int, plan_id: int, record_id: int):
+    with database() as connection:
+        require_record(connection, device_id, plan_id, record_id)
+        record = connection.execute(
+            "SELECT * FROM maintenance_records WHERE id = ?", (record_id,)).fetchone()
+    return render_edit_form(request, "record", record, f"/devices/{device_id}?history=open#record-{record_id}")
+
+
+@app.get("/devices/{device_id}/maintenance-plans/{plan_id}/records/{record_id}/delete")
+def record_delete_confirmation(request: Request, device_id: int, plan_id: int, record_id: int):
+    with database() as connection:
+        require_record(connection, device_id, plan_id, record_id)
+        record = connection.execute(
+            "SELECT * FROM maintenance_records WHERE id = ?", (record_id,)).fetchone()
+    return templates.TemplateResponse(request=request, name="record_delete.html", context={
+        "record": record, "back": f"/devices/{device_id}?history=open#record-{record_id}",
+    })
+
+
+async def form_error_response(request: Request, message: str):
+    values = dict(await request.form())
+    parts = request.url.path.strip("/").split("/")
+    kind = "record" if "records" in parts else "plan" if (
+        "maintenance" in parts or "maintenance-plans" in parts) else "device"
+    back = f"/devices/{parts[1]}" if len(
+        parts) > 1 and parts[1].isdigit() else "/devices"
+    labels = {"device": "機器を登録", "plan": "メンテナンス項目を追加", "record": "実施記録を追加"}
+    if not request.url.path.endswith("/edit"):
+        return templates.TemplateResponse(request=request, name="edit.html", context={
+            "kind": kind, "values": values, "back": back, "heading": labels[kind],
+            "form_action": request.url.path, "error": message,
+        }, status_code=422)
+    return render_edit_form(request, kind, values, back, message, 422)
+
+
+@app.exception_handler(HTTPException)
+async def handle_form_error(request: Request, error: HTTPException):
+    if request.method == "POST" and error.status_code == 422:
+        return await form_error_response(request, str(error.detail))
+    return await http_exception_handler(request, error)
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_input_error(request: Request, error: RequestValidationError):
+    if request.method == "POST":
+        return await form_error_response(request, "入力内容を確認してください。日付・周期などに誤りがあります。")
+    from fastapi.exception_handlers import request_validation_exception_handler
+    return await request_validation_exception_handler(request, error)

@@ -1,66 +1,9 @@
-<!DOCTYPE html>
-<html lang="ja">
-
-<head>
-    <meta charset="UTF-8">
-    <title>メンテナンス実施記録</title>
-</head>
-
-<body>
-
-    <h1>メンテナンス実施記録</h1>
-
-    <p>
-        メンテナンス項目：{{ plan.name }}
-    </p>
-
-    {# 機器IDと項目IDをactionへ埋め込む。サーバー側でも両者の所属関係を確認する。 #}
-    <!-- postは入力値の送信。各入力欄のnameがmain.pyのForm引数に対応する。 -->
-    <form
-        method="post"
-        action="/devices/{{ device_id }}/maintenance-plans/{{ plan.id }}/records"
-    >
-
-        <p>
-            <label>実施日</label><br>
-            <!-- dateは日付入力欄。送信値はYYYY-MM-DD形式の文字列になる。 -->
-            <input
-                type="date"
-                name="performed_at"
-                required
-            >
-        </p>
-
-        <p>
-            <label>メーター値（任意）</label><br>
-            <!-- step="any"で小数を許可する。空欄は保存時にNULLとなり、0とは区別される。 -->
-            <input
-                type="number"
-                step="any"
-                name="meter_value"
-            >
-        </p>
-
-        <p>
-            <label>備考</label><br>
-            <input
-                type="text"
-                name="note"
-            >
-        </p>
-
-        <button type="submit">
-            登録する
-        </button>
-
-    </form>
-
-    <p>
-        <a href="/devices/{{ device_id }}">
-            機器詳細へ戻る
-        </a>
-    </p>
-
-</body>
-
-</html>
+{% extends 'base.html' %}
+{% from '_fields.html' import record_fields, form_actions %}
+{% block title %}実施記録を追加{% endblock %}
+{% block content %}
+<a class="back-link" href="/devices/{{ device_id }}">← 機器詳細へ戻る</a>
+<div class="page-heading"><h1>実施記録を追加</h1></div>
+<p class="muted">{{ plan.name }}</p>
+<section class="panel"><form method="post" action="/devices/{{ device_id }}/maintenance-plans/{{ plan.id }}/records">{{ record_fields() }}{{ form_actions('記録する', '/devices/' ~ device_id) }}</form></section>
+{% endblock %}

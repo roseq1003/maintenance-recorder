@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block title %}実施記録の削除{% endblock %}
+{% block content %}
+<div class="page-heading"><h1>実施記録を削除</h1></div>
+<section class="panel">
+<p>{{ record.performed_at }}の実施記録を削除します。元に戻せません。</p>
+<p class="preserve-lines">{{ record.note or '備考なし' }}</p>
+<form method="post" action="{{ request.url.path }}" class="actions">
+<button class="button danger" type="submit">削除する</button>
+<a class="button" href="{{ back }}">キャンセル</a>
+</form>
+</section>
+{% endblock %}

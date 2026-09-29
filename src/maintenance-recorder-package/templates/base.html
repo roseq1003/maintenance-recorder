@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}機器メンテナンス管理{% endblock %}</title>
+    <link rel="stylesheet" href="{{ asset_url('style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <div class="section-heading">
+            <div><p class="site-title">🔧 機器メンテナンス管理</p><p>機器の点検予定と、日々のお手入れをひと目で。</p></div>
+        </div>
+    </header>
+    {# ページ移動は通常のリンク。見た目をタブにそろえる。 #}
+    <nav aria-label="メインナビゲーション">
+        <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>ダッシュボード</a>
+        <a href="/devices" {% if request.url.path.startswith('/devices') %}aria-current="{{ 'page' if request.url.path == '/devices' else 'location' }}"{% endif %}>機器一覧</a>
+    </nav>
+    <main id="dashboard">{% block content %}{% endblock %}</main>
+</body>
+</html>

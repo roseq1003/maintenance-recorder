@@ -1,66 +1,13 @@
-<!DOCTYPE html>
-<html lang="ja">
-
-<head>
-    <meta charset="UTF-8">
-    <title>登録機器一覧</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-
-<body>
-
-    <h1>登録機器一覧</h1>
-
-    <p>
-        <a href="/">トップへ戻る</a>
-        |
-        <a href="/devices/new">機器を登録する</a>
-    </p>
-
-    <table>
-
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>機器名</th>
-                <th>メーカー</th>
-                <th>型番</th>
-                <th>設置場所</th>
-                <th>購入日</th>
-            </tr>
-        </thead>
-
-        <tbody>
-
-            {# main.pyのcontextにあるdevicesを1件ずつ表示する。device.nameは行のname列。 #}
-            {% for device in devices %}
-
-            <tr>
-                <td>{{ device.id }}</td>
-                <td>
-                    <a href="/devices/{{ device.id }}">{{ device.name }}</a>
-                </td>
-                <td>{{ device.manufacturer }}</td>
-                <td>{{ device.model_number }}</td>
-                <td>{{ device.location }}</td>
-                <td>{{ device.purchase_date }}</td>
-            </tr>
-
-            {# Jinja2のforに付くelseは、繰り返す要素が0件の場合だけ表示される。 #}
-            {% else %}
-
-            <tr>
-                <td colspan="6">
-                    登録機器はまだありません。
-                </td>
-            </tr>
-
-            {% endfor %}
-
-        </tbody>
-
-    </table>
-
-</body>
-
-</html>
+{% extends 'base.html' %}
+{% block title %}登録機器一覧{% endblock %}
+{% block content %}
+<div class="section-heading page-heading"><h1>機器一覧</h1><a class="button primary" href="/devices/new">＋ 機器を登録</a></div>
+<section class="panel"><div class="table-scroll"><table>
+    <thead><tr><th>ID</th><th>機器名</th><th>設置場所</th><th>メーカー・型番</th><th>購入日</th><th>状態</th><th>定期メンテナンス</th><th>備考</th></tr></thead>
+    <tbody>{% for device in devices %}<tr>
+        <td>{{ device.id }}</td><td><a href="/devices/{{ device.id }}">{{ device.name }}</a></td><td>{{ device.location or '—' }}</td>
+        <td>{{ device.manufacturer or '—' }}<br><span class="muted">{{ device.model_number or '—' }}</span></td><td>{{ device.purchase_date or '—' }}</td>
+        <td><span class="status-badge" data-status="{{ device.status }}">{{ device.status }}</span></td><td>{{ device.maintenance_scope }}</td><td>{{ (device.note or '—') | truncate(40) }}</td>
+    </tr>{% else %}<tr><td colspan="8" class="empty-state">登録機器はまだありません。</td></tr>{% endfor %}</tbody>
+</table></div></section>
+{% endblock %}

@@ -1,0 +1,36 @@
+{# 登録・編集で同じ入力欄を利用する。labelで囲み入力欄と名前を関連付ける。 #}
+{% macro device_fields(device={}) %}
+<div class="form-grid">
+    <label>機器名<input name="name" value="{{ device.name or '' }}" required></label>
+    <label>設置場所<input name="location" value="{{ device.location or '' }}"></label>
+    <label>メーカー<input name="manufacturer" value="{{ device.manufacturer or '' }}"></label>
+    <label>型番<input name="model_number" value="{{ device.model_number or '' }}"></label>
+    <label>購入日<input type="date" name="purchase_date" value="{{ device.purchase_date or '' }}"></label>
+    <label>機器の状態<select name="status">{% for value in statuses %}<option {% if value == (device.status or '稼働中') %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+    <label>定期メンテナンス<select name="maintenance_scope">{% for value in scopes %}<option {% if value == (device.maintenance_scope or '未設定') %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+    <label class="full-width">備考<textarea name="note" aria-label="備考" rows="2">{{ device.note or '' }}</textarea></label>
+</div>
+{% endmacro %}
+{% macro plan_fields(plan={}) %}
+<div class="form-grid">
+    <label>項目名<input name="name" value="{{ plan.name or '' }}" required></label>
+    <label>重要度<select name="priority">{% for value in ['低', '中', '高'] %}<option {% if value == priorities.get(plan.priority, '中') %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+    <label>周期<input name="interval_value" type="number" min="1" step="1" value="{{ plan.interval_value or 1 }}" required></label>
+    <label>単位<select name="interval_unit">{% for key, label in units.items() %}<option value="{{ key }}" {% if key == (plan.interval_unit or 'month') %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>初回予定日<input type="date" name="first_due_date" value="{{ plan.first_due_date or '' }}"><small class="muted">日・月・年の周期で、未実施の場合に使います。</small></label>
+    <label class="full-width">作業内容<textarea name="description" aria-label="作業内容" rows="2">{{ plan.description or '' }}</textarea></label>
+</div>
+{% endmacro %}
+{% macro record_fields(record={}) %}
+<div class="form-grid">
+    <label>実施日<input type="date" name="performed_at" value="{{ record.performed_at or '' }}" required></label>
+    <label>メーター値（任意）<input type="number" name="meter_value" min="0" step="any" value="{{ record.meter_value if record.meter_value is defined and record.meter_value is not none else '' }}"></label>
+    <label class="full-width">備考<textarea name="note" aria-label="備考" rows="2">{{ record.note or '' }}</textarea></label>
+</div>
+{% endmacro %}
+{% macro form_actions(label='変更を保存', back='') %}
+<div class="actions">
+    <button class="button primary" type="submit">{{ label }}</button>
+    {% if back %}<a class="button" href="{{ back }}">キャンセル</a>{% endif %}
+</div>
+{% endmacro %}

@@ -1,50 +1,8 @@
-<!DOCTYPE html>
-<html lang="ja">
-
-<head>
-    <meta charset="UTF-8">
-    <title>機器登録</title>
-</head>
-
-<body>
-
-    <h1>機器登録</h1>
-
-    <form method="post" action="/devices/new">
-
-        <p>
-            <label>機器名</label><br>
-            <input type="text" name="name" required>
-        </p>
-
-        <p>
-            <label>メーカー</label><br>
-            <input type="text" name="manufacturer">
-        </p>
-
-        <p>
-            <label>型番</label><br>
-            <input type="text" name="model_number">
-        </p>
-
-        <p>
-            <label>設置場所</label><br>
-            <input type="text" name="location">
-        </p>
-
-        <p>
-            <label>購入日</label><br>
-            <input type="date" name="purchase_date">
-        </p>
-
-        <button type="submit">登録する</button>
-
-    </form>
-
-    <p>
-        <a href="/">トップへ戻る</a>
-    </p>
-
-</body>
-
-</html>
+{% extends 'base.html' %}
+{% from '_fields.html' import device_fields, form_actions %}
+{% block title %}機器登録{% endblock %}
+{% block content %}
+<a class="back-link" href="/devices">← 機器一覧へ戻る</a>
+<div class="page-heading"><h1>機器を登録</h1></div>
+<section class="panel"><h2>機器情報</h2><form method="post" action="/devices/new">{{ device_fields() }}{{ form_actions('登録する', '/devices') }}</form></section>
+{% endblock %}

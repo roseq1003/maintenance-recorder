@@ -1,197 +1,45 @@
-<!DOCTYPE html>
-{# HTML・Jinja2の読み方TIPS
-   このファイルは、サーバー側でJinja2が処理してからブラウザへ渡すHTMLテンプレート。
-   Pythonから渡された値を埋め込み、ブラウザは完成したHTMLとCSSを使って画面を表示する。
-   この形式のJinja2コメントは配信HTMLには残らない。
-   HTMLコメント（<!-- 説明 -->）は画面には出ないが、ブラウザのソース表示には残る。
-   HTMLコメントの中でもJinja2の構文は処理されるので、テンプレートの説明にはこちらを使う。
-
-   <!DOCTYPE html> はブラウザに標準モードでHTMLを扱わせる宣言。
-   要素の基本形は <タグ名 属性="値">内容</タグ名>。末尾の / は終了タグの印。
-   タグは内側から閉じる。インデントは親子関係を読みやすくするためにそろえる。
-   HTMLの改行・連続した空白は通常まとめて表示されるため、ソースの改行は画面の改行とは別。
-#}
-<html lang="ja">
-{# htmlは文書全体の要素。lang="ja"は主な言語が日本語であることを伝える属性。
-   headは文書の設定、bodyは表示する内容をまとめる。
-   属性は要素に付ける追加情報で、値を引用符で囲むと空白などを含めても区切りが明確になる。 #}
-<head>
-    {# charsetは文字コード。UTF-8で日本語などを扱う。
-       viewportはモバイルでの表示幅と初期倍率の設定。CSSの画面幅判定にも関わる。
-       meta・linkは内容や終了タグを持たない空要素。titleはブラウザのタブなどに使う題名。 #}
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>機器メンテナンス管理</title>
-    <!-- rel="stylesheet" はCSSの読み込み。/static/ はmain.pyで公開したフォルダに対応する。 -->
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    {# headerは導入部分、navは主要な移動リンク、mainはページの主な内容を表す。
-       これらは見た目だけでなく、文書の役割を伝えるための要素。
-       h1・h2・h3は見出しの階層。文字の大きさだけを理由に選ばず、内容の構造に合わせる。 #}
-    <header class="site-header">
-        <h1>🔧 機器メンテナンス管理</h1>
-        <p>機器の点検予定と、日々のお手入れをひと目で。</p>
-    </header>
-
-    <nav aria-label="メインナビゲーション">
-        {# aはリンク、hrefは移動先。#から始まる値は同じページのidを指す。
-           /devicesのように/で始まるパスは、このサイトのルートを基準にする。
-           aria-labelは読み上げなどで使う名前、aria-current="page"は現在のページを示す。
-           aria属性は役割や状態を伝えるもので、それ自体で画面遷移を実装するわけではない。 #}
-        <a href="#dashboard" aria-current="page">メイン</a>
-        <!-- #dashboard は同じページ内のidへの移動。/devices はサーバーの別画面への移動。 -->
-        <a href="/devices">登録機器一覧</a>
-    </nav>
-
-    <main id="dashboard">
-        {# idはページ内で重複させない識別名。リンク先や要素の関連付けに使う。
-           classは複数の要素で共有できる分類名。CSSの .page-heading などに対応する。
-           CSSでidを選ぶ場合は #dashboard のように書く。
-           divは汎用のまとまり、spanは文章中の一部分などを囲む要素。
-           pは段落、smallは注記。見た目の細部はstyle.cssで指定する。 #}
-        <div class="page-heading">
-            <h2>ダッシュボード</h2>
-            <span class="demo-label">サンプル表示</span>
-        </div>
-        <p class="sample-note">2026年9月21日時点の表示例です。データの保存・日付の自動判定はまだ行いません。</p>
-
-        <!-- classはCSSから見た目を指定するための名前です。 -->
-        <section class="summary" aria-label="登録機器とメンテナンスの集計">
-            <div class="card">
-                <h3>登録機器数</h3>
-                {# {{ 式 }} はJinja2の出力記法。device_countはPythonから渡されたint（整数）。
-                   ここで表示用の文字に変換される。HTML自体にPythonの型注釈を書く必要はない。
-                   .htmlテンプレートでは通常、<や&などは文字として表示する形に自動エスケープされる。
-                   TIPS: 入力値に安易に |safe を付けると、この保護を無効にするので注意する。 #}
-                <p>{{ device_count }} <span>台</span></p>
-                <small>登録済み機器の合計</small>
-            </div>
-            <div class="card">
-                <h3><a href="#this-month">今月のメンテナンス予定</a></h3>
-                {# | はフィルターを適用する記号。ここではlengthで一覧の件数を数える。
-                   maintenance_listはlist[sqlite3.Row]。空リスト[]なら0を表示する。
-                   現在の一覧は月別の抽出前。見出しだけでは日付の絞り込みは行われない。 #}
-                <p>{{ maintenance_list|length }} <span>件</span></p>
-                <small>2026年9月・期限超過を除く</small>
-            </div>
-            {# next_month_list・overdue_list・recent_history は現在main.pyから渡されていない。
-               Jinja2の標準設定では未定義の一覧は0件として表示される。DBの集計結果ではない。 #}
-            <div class="card">
-                <h3><a href="#next-month">来月のメンテナンス予定</a></h3>
-                <p>{{ next_month_list|length }} <span>件</span></p>
-                <small>2026年10月</small>
-            </div>
-            <div class="card warning">
-                <h3><a href="#overdue">期限超過</a></h3>
-                <p>{{ overdue_list|length }} <span>件</span></p>
-                <small>予定日を過ぎた未実施の項目</small>
-            </div>
-        </section>
-
-        <section class="panel" id="this-month" aria-labelledby="this-month-title">
-            {# sectionは見出しを持つ話題のまとまり。
-               aria-labelledbyは、名前として使う別要素のidを参照する属性。
-               ここでは直下のh2を参照する。aria-labelは名前そのものを書く点が異なる。 #}
-            <h2 id="this-month-title">今月のメンテナンス予定 <span class="count">{{ maintenance_list|length }}件</span></h2>
-            <!-- 狭い画面では、この箱の中だけを横にスクロールできます。 -->
-            <div class="table-scroll" role="region" aria-label="今月の予定表" tabindex="0">
-                {# role="region"は名前付きの領域として伝える指定。
-                   tabindex="0"は通常のTab移動順でフォーカスできるようにする指定。
-                   横スクロールはこの属性ではなく、CSSのoverflow-x: autoによるもの。
-                   tableは表、theadは見出し部分、tbodyはデータ部分、trは1行。
-                   thは見出しセル、tdはデータセル。scope="col"で列の見出しと明示する。 #}
-                <table>
-                    <thead>
-                        <tr><th scope="col">実施予定日</th><th scope="col">機器名</th><th scope="col">メンテナンス項目</th><th scope="col">設置場所</th><th scope="col">重要度</th></tr>
-                    </thead>
-                    <tbody>
-                        {# {% ... %} は繰り返しや分岐などの制御を書くJinja2の記法。
-                           forでmaintenance_listからRowを1件ずつ取り出し、itemという名前で参照する。
-                           item.dateはdate列の値。Jinja2はドット記法で行の列名も参照できる。
-                           Python側のsqlite3.Rowではitem["date"]と書く点に注意する。
-                           endforまでのHTMLが件数分生成される。ブラウザ側でPythonが動くわけではない。
-                           forのelseは一覧が空のときに表示する部分。ifのelseとは役割が異なる。
-                           TIPS: 条件で出し分ける場合は {% if 条件 %} ... {% else %} ... {% endif %}。 #}
-                        {% for item in maintenance_list %}
-                        <tr>
-                            <td>{{ item.date }}</td><td>{{ item.device }}</td><td>{{ item.task }}</td><td>{{ item.location }}</td>
-                            {# data-*は独自のデータを要素に付ける属性。ここでは重要度を文字列で埋め込む。
-                               CSSの .priority[data-level="高"] などがこの値に応じて色を指定する。
-                               色だけに頼らず、spanの中にも重要度の文字を表示する。 #}
-                            <td><span class="priority" data-level="{{ item.priority }}">{{ item.priority }}</span></td>
-                        </tr>
-                        {% else %}
-                        {# colspan="5"はこのセルで5列分を占める指定。上の見出しセルの数に合わせる。 #}
-                        <tr><td colspan="5" class="empty-state">今月の予定はありません。</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <section class="panel" id="next-month" aria-labelledby="next-month-title">
-            <h2 id="next-month-title">来月のメンテナンス予定 <span class="count">{{ next_month_list|length }}件</span></h2>
-            <div class="table-scroll" role="region" aria-label="来月の予定表" tabindex="0">
-                <table>
-                    <thead>
-                        <tr><th scope="col">実施予定日</th><th scope="col">機器名</th><th scope="col">メンテナンス項目</th><th scope="col">設置場所</th><th scope="col">重要度</th></tr>
-                    </thead>
-                    <tbody>
-                        {% for item in next_month_list %}
-                        <tr>
-                            <td>{{ item.date }}</td><td>{{ item.device }}</td><td>{{ item.task }}</td><td>{{ item.location }}</td>
-                            <td><span class="priority" data-level="{{ item.priority }}">{{ item.priority }}</span></td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="5" class="empty-state">来月の予定はありません。</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <section class="panel overdue-panel" id="overdue" aria-labelledby="overdue-title">
-            <h2 id="overdue-title">期限超過 <span class="count">{{ overdue_list|length }}件</span></h2>
-            <p class="section-note">予定日を過ぎています。実施状況を確認してください。</p>
-            <div class="table-scroll" role="region" aria-label="期限超過の予定表" tabindex="0">
-                <table>
-                    <thead>
-                        <tr><th scope="col">実施予定日</th><th scope="col">機器名</th><th scope="col">メンテナンス項目</th><th scope="col">設置場所</th><th scope="col">重要度</th></tr>
-                    </thead>
-                    <tbody>
-                        {% for item in overdue_list %}
-                        <tr>
-                            <td class="overdue-date">{{ item.date }}</td><td>{{ item.device }}</td><td>{{ item.task }}</td><td>{{ item.location }}</td>
-                            <td><span class="priority" data-level="{{ item.priority }}">{{ item.priority }}</span></td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="5" class="empty-state">期限超過はありません。</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <section class="panel" aria-labelledby="history-title">
-            <h2 id="history-title">最近のメンテナンス実施履歴</h2>
-            <div class="table-scroll" role="region" aria-label="最近の実施履歴表" tabindex="0">
-                <table>
-                    <thead>
-                        <tr><th scope="col">実施日</th><th scope="col">機器名</th><th scope="col">メンテナンス項目</th><th scope="col">実施者</th><th scope="col">備考</th><th scope="col">次回予定日</th></tr>
-                    </thead>
-                    <tbody>
-                        {% for item in recent_history %}
-                        <tr>
-                            <td>{{ item.date }}</td><td>{{ item.device }}</td><td>{{ item.task }}</td><td>{{ item.performed_by }}</td><td>{{ item.note }}</td><td>{{ item.next_due_date }}</td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="6" class="empty-state">実施履歴はまだありません。</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </section>
-    </main>
-</body>
-</html>
+{% extends 'base.html' %}
+{% macro schedule_table(items, label) %}
+<div class="table-scroll" role="region" aria-label="{{ label }}" tabindex="0">
+<table><thead><tr><th>実施予定日</th><th>機器名</th><th>メンテナンス項目</th><th>重要度</th><th>設置場所</th><th>作業内容</th><th>操作</th></tr></thead>
+<tbody>
+{% for item in items %}
+<tr>
+<td>{{ item.date }}</td>
+<td><a href="/devices/{{ item.device_id }}">{{ item.device }}</a></td>
+<td><a href="/devices/{{ item.device_id }}/maintenance-plans/{{ item.id }}/records/new">{{ item.name }}</a></td>
+<td><span class="priority" data-level="{{ priorities.get(item.priority, item.priority) }}">{{ priorities.get(item.priority, item.priority) }}</span></td>
+<td>{{ item.location or '—' }}</td><td class="preserve-lines">{{ item.description or '—' }}</td>
+<td><a class="button primary" href="/devices/{{ item.device_id }}/maintenance-plans/{{ item.id }}/records/new">実施記録を追加</a></td>
+</tr>
+{% else %}<tr><td colspan="7" class="empty-state">該当する予定はありません。</td></tr>{% endfor %}
+</tbody></table>
+</div>
+{% endmacro %}
+{% block content %}
+<div class="page-heading"><h1>ダッシュボード</h1></div>
+<section class="summary" aria-label="登録機器とメンテナンスの集計">
+<div class="card"><h2>登録機器数</h2><p>{{ device_count }} <span>台</span></p></div>
+<div class="card"><h2><a href="#this-month">今月の予定</a></h2><p>{{ maintenance_list|length }} <span>件</span></p><small>{{ this_month }}・期限超過を除く</small></div>
+<div class="card"><h2><a href="#next-month">来月の予定</a></h2><p>{{ next_month_list|length }} <span>件</span></p><small>{{ next_month }}</small></div>
+<div class="card warning"><h2><a href="#overdue">期限超過</a></h2><p>{{ overdue_list|length }} <span>件</span></p><small>未実施の項目</small></div>
+</section>
+<p class="muted">各項目の次回予定を表示します。実施記録を保存すると、実施日から次の予定を計算します。</p>
+<section class="panel" id="this-month"><h2>今月のメンテナンス予定 <span class="count">{{ maintenance_list|length }}件</span></h2>{{ schedule_table(maintenance_list, '今月の予定表') }}</section>
+<section class="panel" id="next-month"><h2>来月のメンテナンス予定 <span class="count">{{ next_month_list|length }}件</span></h2>{{ schedule_table(next_month_list, '来月の予定表') }}</section>
+<section class="panel overdue-panel" id="overdue"><h2>期限超過 <span class="count">{{ overdue_list|length }}件</span></h2>{{ schedule_table(overdue_list, '期限超過の予定表') }}</section>
+{% if undated_list %}
+<section class="panel"><h2>予定日を計算できない項目</h2>
+<ul>{% for item in undated_list %}<li>{{ item.device }} / {{ item.name }} — {{ item.reason }} <a href="/devices/{{ item.device_id }}/maintenance-plans/{{ item.id }}/edit">設定を確認</a></li>{% endfor %}</ul>
+</section>
+{% endif %}
+<section class="panel" id="recent-history"><h2>最近のメンテナンス履歴 <span class="count">直近20件まで</span></h2>
+<div class="table-scroll" role="region" aria-label="最近の実施履歴" tabindex="0">
+<table><thead><tr><th>実施日</th><th>機器名</th><th>メンテナンス項目</th><th>メーター値</th><th>備考</th></tr></thead>
+<tbody>{% for item in recent_history %}
+<tr><td>{{ item.performed_at }}</td><td><a href="/devices/{{ item.device_id }}">{{ item.device }}</a></td><td><a href="/devices/{{ item.device_id }}?history=open#record-{{ item.id }}">{{ item.task }}</a></td><td>{{ item.meter_value if item.meter_value is not none else '—' }}</td><td class="preserve-lines">{{ item.note or '—' }}</td></tr>
+{% else %}<tr><td colspan="5" class="empty-state">実施履歴はまだありません。</td></tr>{% endfor %}
+</tbody></table>
+</div>
+</section>
+{% endblock %}

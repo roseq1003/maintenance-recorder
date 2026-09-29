@@ -1,79 +1,9 @@
-<!DOCTYPE html>
-<html lang="ja">
-
-<head>
-    <meta charset="UTF-8">
-    <title>メンテナンス設定登録</title>
-</head>
-
-<body>
-
-    <h1>メンテナンス設定登録</h1>
-
-    <p>
-        対象機器：{{ device.name }}
-    </p>
-
-    {# actionは送信先URL、method="post"は入力内容をリクエスト本文で送る指定。
-       device.idをURLに埋め込み、どの機器に追加する項目かをサーバーへ伝える。 #}
-    <form
-        method="post"
-        action="/devices/{{ device.id }}/maintenance/new"
-    >
-
-        <p>
-            <label>メンテナンス項目</label><br>
-            <!-- name属性はmain.pyの引数名に対応する。requiredはブラウザ側の必須入力チェック。 -->
-            <input type="text" name="name" required>
-        </p>
-
-        <p>
-            <label>作業内容</label><br>
-            <input type="text" name="description">
-        </p>
-
-        <p>
-            <label>頻度</label><br>
-            <!-- サーバー側では整数の必須項目として受け取る。 -->
-            <input type="number" name="interval_value" required>
-        </p>
-
-        <p>
-            <label>単位</label><br>
-
-            <!-- 画面には「日」などを表示し、送信時にはvalueのdayなどを使う。 -->
-            <select name="interval_unit">
-                <option value="day">日</option>
-                <option value="month">か月</option>
-                <option value="year">年</option>
-                <option value="km">km</option>
-                <option value="hour">時間</option>
-                <option value="count">回</option>
-            </select>
-        </p>
-
-        <p>
-            <label>重要度</label><br>
-
-            <select name="priority">
-                <option value="低">低</option>
-                <option value="中">中</option>
-                <option value="高">高</option>
-            </select>
-        </p>
-
-        <button type="submit">
-            登録する
-        </button>
-
-    </form>
-
-    <p>
-        <a href="/devices/{{ device.id }}">
-            機器詳細へ戻る
-        </a>
-    </p>
-
-</body>
-
-</html>
+{% extends 'base.html' %}
+{% from '_fields.html' import plan_fields, form_actions %}
+{% block title %}メンテナンス項目を追加{% endblock %}
+{% block content %}
+<a class="back-link" href="/devices/{{ device.id }}">← 機器詳細へ戻る</a>
+<div class="page-heading"><h1>メンテナンス項目を追加</h1></div>
+<p class="muted">対象機器：{{ device.name }}</p>
+<section class="panel"><form method="post" action="/devices/{{ device.id }}/maintenance/new">{{ plan_fields() }}{{ form_actions('項目を追加', '/devices/' ~ device.id) }}</form></section>
+{% endblock %}

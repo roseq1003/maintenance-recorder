@@ -1,29 +1,19 @@
-"""機器・メンテナンス項目・実施記録のテーブルを作成する初期化スクリプト。
-
-既存データは削除しない。サンプル機器も追加しないため、繰り返し実行できる。
-トップ画面が参照する旧 maintenance テーブルは、このスクリプトでは作成しない。
-"""
+"""アプリで使用するテーブルを作成し、既存DBには不足する列を追加する。"""
 
 from contextlib import closing
-from pathlib import Path
 import sqlite3
+from pathlib import Path
 from typing import Union
 
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = BASE_DIR / "maintenance.db"
 
-# main.py と同じ場所のDBを使う。Path の / はフォルダ名とファイル名の連結。
-DB_PATH: Path = Path(__file__).resolve().parent / "maintenance.db"
 
-
-def initialize_database(db_path: Union[str, Path] = DB_PATH) -> None:
-    """指定したDBに必要なテーブルを作る。引数を省略するとアプリのDBを使う。"""
-    # Union[str, Path]は文字列またはPathを受け取る指定。-> Noneは値を返さない関数を表す。
-    # connect() はDBファイルがなければ作成する。closing() は終了時に接続を閉じる。
-    with closing(sqlite3.connect(db_path)) as connection:
-        # connectionの型はsqlite3.Connection。execute()の戻り値はsqlite3.Cursor。
-        # CREATE TABLEでは表示する検索結果がないため、戻り値の保存やfetchall()は不要。
-        # IF NOT EXISTS は、同名テーブルがある場合に作成をスキップする指定。
-        # 既存テーブルへの列追加など、スキーマの変更は行わない。
-        # INTEGER PRIMARY KEY AUTOINCREMENT は自動採番のID、NOT NULL はNULL禁止。
+def init_db(db_path: Union[str, Path] = DB_PATH) -> None:
+    """繰り返し実行可能。既存の機器・項目・実施記録は削除しない。"""
+    with closing(sqlite3.connect(db_path)) as connection, connection:
+        # DDL（テーブル・列の追加）もまとめて確定・取り消しできるようにする。
+        connection.execute("BEGIN")
         connection.execute("""
             CREATE TABLE IF NOT EXISTS devices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,13 +21,12 @@ def initialize_database(db_path: Union[str, Path] = DB_PATH) -> None:
                 manufacturer TEXT,
                 model_number TEXT,
                 location TEXT,
-                purchase_date TEXT
+                status TEXT NOT NULL DEFAULT '稼働中',
+                purchase_date TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                maintenance_scope TEXT NOT NULL DEFAULT '未設定'
             )
         """)
-
-        # FOREIGN KEY は、device_id が devices.id を参照する関係を定義する。
-        # SQLiteで参照整合性を強制するには、接続ごとに PRAGMA foreign_keys = ON が必要。
-        # 現在のアプリはその指定をしていないため、定義だけでは不正なIDを拒否しない。
         connection.execute("""
             CREATE TABLE IF NOT EXISTS maintenance_plans (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,12 +36,10 @@ def initialize_database(db_path: Union[str, Path] = DB_PATH) -> None:
                 interval_value INTEGER,
                 interval_unit TEXT,
                 priority TEXT,
+                first_due_date TEXT NOT NULL DEFAULT '',
                 FOREIGN KEY (device_id) REFERENCES devices(id)
             )
         """)
-
-        # 1つの項目に対して複数の実施記録を保存できる。
-        # 日付はTEXT、メーター値は小数も扱えるREAL。任意項目はNULLを許可する。
         connection.execute("""
             CREATE TABLE IF NOT EXISTS maintenance_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,8 +51,32 @@ def initialize_database(db_path: Union[str, Path] = DB_PATH) -> None:
             )
         """)
 
+        # CREATE TABLE IF NOT EXISTS は既存テーブルを変更しないため、
+        # 追加した項目を古いDBにも反映する。テーブル名・列名は固定値のみ。
+        additions = {
+            "devices": {
+                "status": "TEXT NOT NULL DEFAULT '稼働中'",
+                "note": "TEXT NOT NULL DEFAULT ''",
+                "maintenance_scope": "TEXT NOT NULL DEFAULT '未設定'",
+            },
+            "maintenance_plans": {
+                "first_due_date": "TEXT NOT NULL DEFAULT ''",
+            },
+        }
+        for table, definitions in additions.items():
+            columns = {row[1] for row in connection.execute(
+                f"PRAGMA table_info({table})")}
+            for column, definition in definitions.items():
+                if column not in columns:
+                    connection.execute(
+                        f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
-# 直接実行した場合だけ初期化する。importしただけではDBに触らない。
+        # 旧定義の status TEXT は未入力でNULLになる。状態未入力の機器だけ
+        # 初期値にそろえ、故障中・廃止など明示的に設定された状態は維持する。
+        connection.execute(
+            "UPDATE devices SET status = '稼働中' WHERE status IS NULL OR status = ''")
+
+
 if __name__ == "__main__":
-    initialize_database()
-    print("データベースを初期化しました")
+    init_db()
+    print("データベースを初期化・更新しました")

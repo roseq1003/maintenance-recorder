@@ -1,148 +1,53 @@
-<!DOCTYPE html>
-<html lang="ja">
-
-<head>
-    <meta charset="UTF-8">
-    <title>{{ device.name }} - 機器詳細</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<script src="/static/app.js"></script>
-<body>
-
-    <h1>{{ device.name }}</h1>
-
-    <table>
-
-        <tr>
-            <th>ID</th>
-            <td>{{ device.id }}</td>
-        </tr>
-
-        <tr>
-            <th>メーカー</th>
-            <td>{{ device.manufacturer }}</td>
-        </tr>
-
-        <tr>
-            <th>型番</th>
-            <td>{{ device.model_number }}</td>
-        </tr>
-
-        <tr>
-            <th>設置場所</th>
-            <td>{{ device.location }}</td>
-        </tr>
-
-        <tr>
-            <th>購入日</th>
-            <td>{{ device.purchase_date }}</td>
-        </tr>
-
-    </table>
-
-    <h2>メンテナンス項目</h2>
-
-    <table>
-
-        <thead>
-            <tr>
-                <th>項目</th>
-                <th>内容</th>
-                <th>周期</th>
-                <th>重要度</th>
-                <th>操作</th>
-            </tr>
-        </thead>
-
-        <tbody>
-
-            {% for plan in maintenance_plans %}
-
-            <tr>
-                <td>{{ plan.name }}</td>
-                <td>{{ plan.description }}</td>
-                <td>
-                    {{ plan.interval_value }}
-                    {{ plan.interval_unit }}
-                </td>
-                <td>{{ plan.priority }}</td>
-                <td>
-                    <a href="/devices/{{ device.id }}/maintenance-plans/{{ plan.id }}/records/new">
-                        実施記録を追加
-                    </a>
-
-                    <button
-                        type="button"
-                        onclick="toggleHistory('history-{{ plan.id }}')"
-                    >
-                        履歴を見る
-                    </button>
-                </td>
-            </tr>
-            <tr
-                id="history-{{ plan.id }}"
-                style="display: none;"
-            >
-                <td colspan="5">
-
-                    <strong>実施履歴</strong>
-
-                    <ul>
-
-                        {% for record in maintenance_records %}
-
-                            {% if record.maintenance_plan_id == plan.id %}
-
-                                <li>
-                                    {{ record.performed_at }}
-
-                                    {% if record.meter_value is not none %}
-                                        / {{ record.meter_value }}
-                                    {% endif %}
-
-                                    {% if record.note %}
-                                        / {{ record.note }}
-                                    {% endif %}
-                                </li>
-
-                            {% endif %}
-
-                        {% endfor %}
-
-                    </ul>
-
-                </td>
-            </tr>
-
-            {% else %}
-
-            <tr>
-                <td colspan="5">
-                    メンテナンス項目はまだありません。
-                </td>
-            </tr>
-
-            {% endfor %}
-
-        </tbody>
-
-    </table>
-    
-    <p>
-        <a href="/devices/{{ device.id }}/maintenance/new">
-            メンテナンス項目を追加
-        </a>
-    </p>
-
-    <p>
-        <a href="/devices">登録機器一覧へ戻る</a>
-    </p>
-
-    <p>
-        <a href="/">トップへ戻る</a>
-    </p>
-
-    <script src="/static/app.js"></script>
-
-</body>
-</html>
+{% extends 'base.html' %}
+{% block title %}{{ device.name }} - 機器詳細{% endblock %}
+{% block content %}
+<a class="back-link" href="/devices">← 機器一覧へ戻る</a>
+<div class="page-heading"><h1>{{ device.name }}</h1><span class="status-badge" data-status="{{ device.status }}">{{ device.status }}</span></div>
+<p class="muted">定期メンテナンス：{{ device.maintenance_scope }}{% if device.maintenance_scope == '対象' and not maintenance_plans %}（項目未登録）{% endif %}</p>
+{% if request.query_params.get('saved') in ['device', 'plan', 'record', 'deleted'] %}
+<p class="save-notice" role="status">{{ '実施記録を削除しました。' if request.query_params.get('saved') == 'deleted' else '変更を保存しました。' }}</p>
+{% endif %}
+<section class="panel" id="device-info">
+    <h2>機器情報</h2>
+    <div class="read-view"><dl class="info-grid">
+        <div><dt>メーカー</dt><dd>{{ device.manufacturer or '—' }}</dd></div>
+        <div><dt>型番</dt><dd>{{ device.model_number or '—' }}</dd></div>
+        <div><dt>設置場所</dt><dd>{{ device.location or '—' }}</dd></div>
+        <div><dt>購入日</dt><dd>{{ device.purchase_date or '—' }}</dd></div>
+        <div class="full-width"><dt>備考</dt><dd class="preserve-lines">{{ device.note or '—' }}</dd></div>
+    </dl></div>
+    <a class="button" href="/devices/{{ device.id }}/edit">機器情報を編集</a>
+</section>
+<section aria-labelledby="plans-heading">
+    <div class="section-heading"><h2 id="plans-heading">メンテナンス項目 <span class="count">{{ maintenance_plans|length }}件</span></h2><a class="button primary" href="/devices/{{ device.id }}/maintenance/new">＋ 項目を追加</a></div>
+    {% if device.maintenance_scope == '非該当' %}<p class="muted">定期メンテナンス非該当です。登録済みの項目・履歴は引き続き確認できます。</p>{% endif %}
+    {% for plan in maintenance_plans %}
+    <article class="panel" id="plan-{{ plan.id }}">
+        <h3>{{ plan.name }}</h3>
+        <div class="read-view"><dl class="info-grid">
+            <div><dt>作業内容：</dt><dd class="preserve-lines">{{ plan.description or '未登録' }}</dd></div>
+            <div><dt>初回予定日：</dt><dd>{{ plan.first_due_date or "未設定" }}</dd></div>
+            <div><dt>作業頻度：</dt><dd>{{ plan.interval_value }}{{ units.get(plan.interval_unit, plan.interval_unit) }}ごと</dd></div>
+            <div><dt>重要度：</dt><dd><span class="priority" data-level="{{ priorities.get(plan.priority, plan.priority) }}">{{ priorities.get(plan.priority, plan.priority) }}</span></dd></div>
+        </dl></div>
+        <div class="record-action"><a class="button primary" href="/devices/{{ device.id }}/maintenance-plans/{{ plan.id }}/records/new">実施記録を追加</a></div>
+        <div class="item-edit-action"><a class="button" href="/devices/{{ device.id }}/maintenance-plans/{{ plan.id }}/edit">項目を編集</a></div>
+        {% set records = maintenance_records | selectattr('maintenance_plan_id', 'equalto', plan.id) | list %}
+        <details class="history" {% if request.query_params.get('saved') == 'record' or request.query_params.get('history') == 'open' %}open{% endif %}>
+            <summary>実施履歴 <span class="count">{{ records|length }}件</span></summary>
+            {% for record in records %}
+            <div class="history-record" id="record-{{ record.id }}">
+                <strong>{{ record.performed_at }}</strong>
+                {% if record.meter_value is not none %}<p>メーター値：{{ record.meter_value }}</p>{% endif %}
+                <p class="preserve-lines">{{ record.note or '備考なし' }}</p>
+                <div class="actions">
+                    <a class="button" href="/devices/{{ device.id }}/maintenance-plans/{{ plan.id }}/records/{{ record.id }}/edit">編集</a>
+                    <a class="button danger" href="/devices/{{ device.id }}/maintenance-plans/{{ plan.id }}/records/{{ record.id }}/delete">削除</a>
+                </div>
+            </div>
+            {% else %}<p class="muted">実施履歴はまだありません。</p>{% endfor %}
+        </details>
+    </article>
+    {% else %}<div class="panel empty-state">メンテナンス項目はまだありません。</div>{% endfor %}
+</section>
+{% endblock %}
