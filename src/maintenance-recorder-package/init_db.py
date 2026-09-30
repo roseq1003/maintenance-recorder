@@ -11,6 +11,8 @@ DB_PATH = BASE_DIR / "maintenance.db"
 
 def init_db(db_path: Union[str, Path] = DB_PATH) -> None:
     """繰り返し実行可能。既存の機器・項目・実施記録は削除しない。"""
+    # Union[str, Path]は文字列かPathを受け取る型注釈。アプリ起動時はmainのDB_PATHを使う。
+    # closingは接続を必ず閉じる。後ろのconnectionは成功時の確定・例外時の取り消しを担当。
     with closing(sqlite3.connect(db_path)) as connection, connection:
         # DDL（テーブル・列の追加）もまとめて確定・取り消しできるようにする。
         connection.execute("BEGIN")
@@ -64,6 +66,8 @@ def init_db(db_path: Union[str, Path] = DB_PATH) -> None:
             },
         }
         for table, definitions in additions.items():
+            # PRAGMAはSQLiteの構造を調べる命令。row[1]が列名。
+            # {式 for ...} は集合内包表記で、既存の列名を集合にまとめる。
             columns = {row[1] for row in connection.execute(
                 f"PRAGMA table_info({table})")}
             for column, definition in definitions.items():
@@ -78,5 +82,6 @@ def init_db(db_path: Union[str, Path] = DB_PATH) -> None:
 
 
 if __name__ == "__main__":
+    # 直接実行したときだけ動く。main.pyからimportしただけではDBを変更しない。
     init_db()
     print("データベースを初期化・更新しました")

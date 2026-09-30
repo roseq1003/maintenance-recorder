@@ -2,7 +2,6 @@
 
 from contextlib import contextmanager, asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
-from calendar import monthrange
 import math
 import json
 from io import BytesIO
@@ -21,11 +20,19 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import http_exception_handler
 
 
-# 「変数名: 型 = 値」は型注釈付きの代入。型注釈だけで値が変換されるわけではない。
-# strは文字列、intは整数、floatは小数を扱う数値。エディターで型を確認する目印にもなる。
+# uvicorn main:app（単独）とパッケージ経由のどちらの読み込みにも対応する。
+# 「.」付きは同じパッケージ内からの相対インポート。
+# next_date / scheduled_dateは、従来のmain経由の参照も使えるように公開を維持する。
+if __package__:
+    from .scheduling import group_schedules, next_date, scheduled_date
+else:
+    from scheduling import group_schedules, next_date, scheduled_date
+
+
+# デコレーター（@...）は直後の関数に機能を付ける。この場合は起動・終了処理として使う。
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 単独モジュールとしての起動・パッケージ経由の起動の両方に対応。
+    """起動時にDBを準備する。yield以降はサーバー終了時の処理になる。"""
     if __package__:
         from .init_db import init_db
     else:
@@ -39,6 +46,7 @@ app = FastAPI(lifespan=lifespan)
 
 # __file__ はこのファイルのパス。resolve() で絶対パスにし、parent で親フォルダを得る。
 # 起動した場所に左右されないよう、DB・HTML・CSSの場所を main.py 基準で指定する。
+# 「変数名: 型 = 値」は型注釈付きの代入。型注釈だけで値が変換されるわけではない。
 BASE_DIR: Path = Path(__file__).resolve().parent
 DB_PATH: Path = BASE_DIR / "maintenance.db"
 QR_CONFIG_PATH: Path = BASE_DIR / "config" / "default.json"
@@ -55,7 +63,7 @@ SCOPES = ("対象", "非該当", "未設定")
 
 
 def asset_url(filename: str) -> str:
-    # 更新したCSS/JSをブラウザーが古いキャッシュで表示しないようにする。
+    """静的ファイルの更新時刻をURLに付け、更新後のCSSを取得させる。"""
     version = (BASE_DIR / "static" / filename).stat().st_mtime_ns
     return f"/static/{filename}?v={version}"
 
@@ -73,7 +81,7 @@ def database() -> Iterator[sqlite3.Connection]:
     # Row を使うと、列番号ではなく列名で値を参照できる。
     # Jinja2 でも device.name のように参照できるため、辞書への詰め直しは不要。
     connection.row_factory = sqlite3.Row
-    # Rowは辞書そのものではない。Pythonではrow["name"]またはrow[0]で値を取り出す。ここはwiki(jinja2とSQlite3を使うときの割と便利なtips)で詳細書いている。
+    # Rowは辞書そのものではない。Pythonではrow["name"]またはrow[0]で値を取り出す。
     # 標準のrow_factoryでは1行はtuple。この設定以降に作るカーソルではRowになる。
     try:
         # Connection の with はトランザクションを管理するが、接続自体は閉じない。
@@ -90,38 +98,16 @@ def today() -> date:
     return datetime.now(timezone(timedelta(hours=9))).date()
 
 
-def next_date(base: date, value: int, unit: str) -> date:
-    if unit == "day":
-        return base + timedelta(days=value)
-    months = value * 12 if unit == "year" else value
-    year, month = divmod(base.year * 12 + base.month - 1 + months, 12)
-    month += 1
-    return date(year, month, min(base.day, monthrange(year, month)[1]))
-
-
-def scheduled_date(plan) -> Optional[date]:
-    """最新実施日＋周期。未実施なら初回予定日を使う。"""
-    if plan["interval_unit"] not in ("day", "month", "year"):
-        return None
-    try:
-        value = int(plan["interval_value"])
-        if value < 1:
-            return None
-        if plan["last_performed"]:
-            return next_date(date.fromisoformat(plan["last_performed"]), value, plan["interval_unit"])
-        return date.fromisoformat(plan["first_due_date"]) if plan["first_due_date"] else None
-    except (TypeError, ValueError, OverflowError):
-        return None
-
-
+# @app.getは「このURLをGETで開いたら、この関数を呼ぶ」というFastAPIへの登録。
 @app.get("/")
 def home(request: Request) -> HTMLResponse:
+    """DBから項目と最新実施日を読み、予定の分類結果と履歴を画面へ渡す。"""
     current = today()
-    next_month = next_date(current.replace(day=1), 1, "month")
-    following_month = next_date(next_month, 1, "month")
     with database() as connection:
         device_count = connection.execute(
             "SELECT COUNT(*) FROM devices").fetchone()[0]
+        # 相関サブクエリ：項目pごとに記録rを調べ、MAXで最新実施日を取り出す。
+        # 未実施ならlast_performedはNULL（PythonではNone）になる。
         plans = connection.execute("""
             SELECT p.*, d.name AS device, d.location,
                    (SELECT MAX(r.performed_at) FROM maintenance_records r
@@ -137,30 +123,11 @@ def home(request: Request) -> HTMLResponse:
             JOIN devices d ON d.id = p.device_id
             ORDER BY r.performed_at DESC, r.id DESC LIMIT 20
         """).fetchall()
-    maintenance_list, next_month_list, overdue_list, undated_list = [], [], [], []
-    for plan in plans:
-        item = dict(plan)
-        due = scheduled_date(plan)
-        if due is None:
-            item["reason"] = ("日付では管理しない周期" if plan["interval_unit"] in ("km", "hour", "count")
-                              else "初回予定日・周期を確認してください")
-            undated_list.append(item)
-            continue
-        item["date"] = due.isoformat()
-        if due < current:
-            overdue_list.append(item)
-        elif due < next_month:
-            maintenance_list.append(item)
-        elif due < following_month:
-            next_month_list.append(item)
-    for items in (maintenance_list, next_month_list, overdue_list):
-        items.sort(key=lambda item: (item["date"], item["id"]))
+    schedule_context = group_schedules(plans, current)
     return templates.TemplateResponse(request=request, name="index.html", context={
-        "device_count": device_count, "maintenance_list": maintenance_list,
-        "next_month_list": next_month_list, "overdue_list": overdue_list,
-        "undated_list": undated_list, "recent_history": recent_history,
-        "this_month": f"{current.year}年{current.month}月",
-        "next_month": f"{next_month.year}年{next_month.month}月",
+        "device_count": device_count, "recent_history": recent_history,
+        # **辞書 は、その辞書のキーと値を別の辞書に展開する記法。
+        **schedule_context,
     })
 
 
@@ -206,6 +173,8 @@ def create_device(
     """機器登録フォームの値を保存し、トップページへ戻す。"""
     # : str は型注釈。FastAPI は型と Form の指定を使って入力を受け取り検証する。
     # Form(...) は必須、Form("") は省略時に空文字列を使う指定。
+    # Annotated[str, Form()] はstr型に「フォームから受け取る」という情報を添える記法。
+    # この書き方では省略時の値を = "" などで指定する。
     validate_device(name, purchase_date, status, maintenance_scope)
     with database() as connection:
         # ? は値を後から渡すプレースホルダ。SQLに入力文字列を直接連結しない。
@@ -224,19 +193,7 @@ def device_detail(request: Request, device_id: int) -> HTMLResponse:
     """指定した機器の基本情報と、その機器に属するメンテナンス項目を表示する。"""
     # URLの {device_id} が引数に入る。int の指定により整数以外は検証エラーになる。
     with database() as connection:
-        cursor: sqlite3.Cursor = connection.execute("""
-            SELECT id, name, manufacturer, model_number, location, purchase_date,
-                   note, status, maintenance_scope
-            FROM devices
-            WHERE id = ?
-        """, (device_id,))
-        # Optional[T]は「TまたはNone」。この時点では機器が見つからない可能性もある。
-        device: Optional[sqlite3.Row] = cursor.fetchone()
-        # (device_id,) は要素が1つのタプル。末尾のカンマがないと単なる括弧になる。
-        # fetchone() は1行を返し、該当する行がない場合は None を返す。
-        if device is None:
-            raise HTTPException(status_code=404, detail="機器が見つかりません")
-        # Noneなら上で処理を終了するため、ここから先のdeviceはRowとして使える。
+        device = require_device(connection, device_id)
 
         cursor = connection.execute("""
             SELECT id, device_id, name, description, interval_value, interval_unit, priority, first_due_date
@@ -307,11 +264,7 @@ def device_qr_target(request: Request, device_id: int) -> str:
 def device_qr(request: Request, device_id: int) -> HTMLResponse:
     """機器詳細へのURLと、そのURLを格納したQRコードを表示する。"""
     with database() as connection:
-        device: Optional[sqlite3.Row] = connection.execute(
-            "SELECT id, name FROM devices WHERE id = ?", (device_id,)
-        ).fetchone()
-    if device is None:
-        raise HTTPException(status_code=404, detail="機器が見つかりません")
+        device = require_device(connection, device_id)
 
     # 表示するURLと画像に格納するURLは、同じ関数で決定して一致させる。
     target_url: str = device_qr_target(request, device_id)
@@ -348,14 +301,7 @@ def device_qr_image(request: Request, device_id: int, download: bool = False) ->
 def maintenance_plan_new(request: Request, device_id: int) -> HTMLResponse:
     """対象機器の存在を確認して、メンテナンス項目の登録画面を表示する。"""
     with database() as connection:
-        cursor: sqlite3.Cursor = connection.execute(
-            "SELECT id, name FROM devices WHERE id = ?", (device_id,)
-        )
-        # このRowに入る列はSELECTしたid（int）とname（str）だけ。
-        device: Optional[sqlite3.Row] = cursor.fetchone()
-
-    if device is None:
-        raise HTTPException(status_code=404, detail="機器が見つかりません")
+        device = require_device(connection, device_id)
 
     return templates.TemplateResponse(
         request=request, name="maintenance_plan_new.html", context={"device": device}
@@ -385,11 +331,12 @@ def create_maintenance_plan(
         """, (device_id, name, description, interval_value, interval_unit, priority, first_due_date))
 
     # f"..." は文字列内の {式} を値に置き換える、f文字列の記法。
-    # 処理が終わったあと、ブラウザに「次は /devices/{device_id} を開いてね」としている。303 は HTTP ステータスコードで、特にフォーム送信後によく使い、ブラウザに「次は GET で開いてね」と指示する意味がある。
+    # 303でブラウザーに機器詳細のGETを指示し、再読み込みによる二重登録を避ける。
     return RedirectResponse(url=f"/devices/{device_id}", status_code=303)
 
 
 def validate_date(value: str, label: str, required: bool = False) -> None:
+    """任意／必須の日付をYYYY-MM-DD形式で検証し、不正なら422を返す。"""
     if not value and not required:
         return
     try:
@@ -400,6 +347,7 @@ def validate_date(value: str, label: str, required: bool = False) -> None:
 
 
 def validate_device(name: str, purchase_date: str, status: str, scope: str) -> None:
+    """機器名・購入日・状態・区分を保存前に確認する。"""
     if not name.strip():
         raise HTTPException(status_code=422, detail="機器名を入力してください")
     validate_date(purchase_date, "購入日")
@@ -408,14 +356,18 @@ def validate_device(name: str, purchase_date: str, status: str, scope: str) -> N
 
 
 def validate_plan(name: str, interval_value: int, interval_unit: str, priority: str) -> None:
+    """項目名、正の周期、選択肢の単位と重要度を保存前に確認する。"""
     if not name.strip() or interval_value < 1 or interval_unit not in UNITS or priority not in PRIORITIES:
         raise HTTPException(
             status_code=422, detail="項目名・1以上の周期・単位・重要度を確認してください")
 
 
 def validate_record(performed_at: str, meter_value: str) -> Optional[float]:
+    """実施日を検証し、メーター値を数値または未入力のNoneへ変換する。"""
+    # Optional[float]は「floatまたはNone」。未入力と数値の0を区別して保存する。
     validate_date(performed_at, "実施日", required=True)
     try:
+        # 条件式 A if 条件 else B。空欄はNone、入力された0は数値0として区別する。
         value = float(meter_value) if meter_value.strip() else None
         if value is not None and (not math.isfinite(value) or value < 0):
             raise ValueError
@@ -424,9 +376,25 @@ def validate_record(performed_at: str, meter_value: str) -> Optional[float]:
         raise HTTPException(status_code=422, detail="メーター値は0以上の数値で入力してください")
 
 
-def require_device(connection: sqlite3.Connection, device_id: int) -> None:
-    if not connection.execute("SELECT id FROM devices WHERE id = ?", (device_id,)).fetchone():
+def require_device(connection: sqlite3.Connection, device_id: int) -> sqlite3.Row:
+    """機器を1件取得する。なければ404で終了するため、呼び出し元で再確認は不要。"""
+    # ? は値のプレースホルダ。(device_id,) は要素1つのタプル。
+    # fetchone()は1行のRowを返し、該当行がなければNoneになる。
+    device = connection.execute(
+        "SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+    if device is None:
         raise HTTPException(status_code=404, detail="機器が見つかりません")
+    return device
+
+
+def require_plan(connection: sqlite3.Connection, device_id: int, plan_id: int) -> sqlite3.Row:
+    """指定機器に属する項目を取得する。項目が別の機器に属する場合も404にする。"""
+    plan = connection.execute(
+        "SELECT * FROM maintenance_plans WHERE id = ? AND device_id = ?",
+        (plan_id, device_id)).fetchone()
+    if plan is None:
+        raise HTTPException(status_code=404, detail="メンテナンス項目が見つかりません")
+    return plan
 
 
 @app.post("/devices/{device_id}/edit")
@@ -441,6 +409,7 @@ def update_device(
     status: str = Form(...),
     maintenance_scope: str = Form(...)
 ) -> RedirectResponse:
+    """入力を検証して機器を更新し、詳細画面の機器情報へ戻す。"""
     validate_device(name, purchase_date, status, maintenance_scope)
     with database() as connection:
         require_device(connection, device_id)
@@ -459,6 +428,7 @@ def update_maintenance_plan(
     interval_value: int = Form(...), interval_unit: str = Form(...), priority: str = Form(...),
     first_due_date: Annotated[str, Form()] = ""
 ) -> RedirectResponse:
+    """機器と項目のIDを照合して更新する。項目IDと既存の記録は維持する。"""
     validate_plan(name, interval_value, interval_unit, priority)
     validate_date(first_due_date, "初回予定日")
     with database() as connection:
@@ -471,14 +441,17 @@ def update_maintenance_plan(
     return RedirectResponse(url=f"/devices/{device_id}?saved=plan#plan-{plan_id}", status_code=303)
 
 
-def require_record(connection: sqlite3.Connection, device_id: int, plan_id: int, record_id: int) -> None:
+def require_record(connection: sqlite3.Connection, device_id: int, plan_id: int, record_id: int) -> sqlite3.Row:
+    """機器→項目→記録の所属を照合し、表示・更新・削除に使う記録を返す。"""
+    # JOINで項目のdevice_idまで調べ、URLのIDを変えた誤操作を防ぐ。
     record = connection.execute("""
-        SELECT r.id FROM maintenance_records r
+        SELECT r.* FROM maintenance_records r
         JOIN maintenance_plans p ON p.id = r.maintenance_plan_id
         WHERE r.id = ? AND p.id = ? AND p.device_id = ?
     """, (record_id, plan_id, device_id)).fetchone()
     if record is None:
         raise HTTPException(status_code=404, detail="実施記録が見つかりません")
+    return record
 
 
 @app.post("/devices/{device_id}/maintenance-plans/{plan_id}/records/{record_id}/edit")
@@ -486,6 +459,7 @@ def update_maintenance_record(
     request: Request, device_id: int, plan_id: int, record_id: int,
     performed_at: str = Form(...), meter_value: str = Form(""), note: str = Form("")
 ) -> RedirectResponse:
+    """入力と所属を検証して記録を修正し、詳細画面の該当記録へ戻す。"""
     value = validate_record(performed_at, meter_value)
     with database() as connection:
         require_record(connection, device_id, plan_id, record_id)
@@ -497,6 +471,7 @@ def update_maintenance_record(
 
 @app.post("/devices/{device_id}/maintenance-plans/{plan_id}/records/{record_id}/delete")
 def delete_maintenance_record(request: Request, device_id: int, plan_id: int, record_id: int) -> RedirectResponse:
+    """所属を確認して記録を削除する。次回表示時の予定計算にも反映される。"""
     with database() as connection:
         require_record(connection, device_id, plan_id, record_id)
         connection.execute(
@@ -508,16 +483,7 @@ def delete_maintenance_record(request: Request, device_id: int, plan_id: int, re
 def maintenance_record_new(request: Request, device_id: int, plan_id: int) -> HTMLResponse:
     """指定機器のメンテナンス項目に対する、実施記録の入力画面を表示する。"""
     with database() as connection:
-        # 項目IDだけでなく機器IDも照合し、別の機器の項目が表示されるのを防ぐ。
-        cursor: sqlite3.Cursor = connection.execute("""
-            SELECT id, name FROM maintenance_plans
-            WHERE id = ? AND device_id = ?
-        """, (plan_id, device_id))
-        # 見つかればid・nameを持つRow、見つからなければNone。
-        plan: Optional[sqlite3.Row] = cursor.fetchone()
-
-    if plan is None:
-        raise HTTPException(status_code=404, detail="メンテナンス項目が見つかりません")
+        plan = require_plan(connection, device_id, plan_id)
 
     return templates.TemplateResponse(
         request=request,
@@ -538,19 +504,10 @@ def create_maintenance_record(
     meter_value_db = validate_record(performed_at, meter_value)
     with database() as connection:
         # POSTだけを直接送ることも可能なので、入力画面と同じ所属確認を行う。
-        cursor: sqlite3.Cursor = connection.execute("""
-            SELECT id FROM maintenance_plans
-            WHERE id = ? AND device_id = ?
-        """, (plan_id, device_id))
-        # 存在確認用なので取得する列はidのみ。型はRowまたはNone。
-        plan: Optional[sqlite3.Row] = cursor.fetchone()
-        if plan is None:
-            raise HTTPException(status_code=404, detail="メンテナンス項目が見つかりません")
+        require_plan(connection, device_id, plan_id)
 
-        # A if 条件 else B は条件式。未入力は None とし、SQLiteでは NULL で保存する。
-        # 数値の 0 と未入力を区別するため、文字列として受け取ってから float に変換する。
-        # 入力"12.5"（str）は12.5（float）へ、空文字列はNoneへ変わる。
-        # Optional[float]は「floatまたはNone」。実施日のperformed_atはstrのまま保存する。
+        # validate_recordで変換済みの数値を保存する。NoneはSQLiteのNULLになる。
+        # 実施日はYYYY-MM-DDの文字列のまま保存するため、SQLでも日付順に並べられる。
         connection.execute("""
             INSERT INTO maintenance_records (maintenance_plan_id, performed_at, meter_value, note)
             VALUES (?, ?, ?, ?)
@@ -559,8 +516,14 @@ def create_maintenance_record(
     return RedirectResponse(url=f"/devices/{device_id}", status_code=303)
 
 
-def render_edit_form(request: Request, kind: str, values, back: str, error: str = "", status_code: int = 200):
-    labels = {"device": "機器情報を編集", "plan": "メンテナンス項目を編集", "record": "実施記録を編集"}
+def render_edit_form(request: Request, kind: str, values, back: str, error: str = "",
+                     status_code: int = 200, *, creating: bool = False) -> HTMLResponse:
+    """共通フォームに値・見出し・戻り先を渡す。入力エラー時にも同じ画面を使う。"""
+    # * より後の引数は creating=True のように名前を付けて渡す。
+    if creating:
+        labels = {"device": "機器を登録", "plan": "メンテナンス項目を追加", "record": "実施記録を追加"}
+    else:
+        labels = {"device": "機器情報を編集", "plan": "メンテナンス項目を編集", "record": "実施記録を編集"}
     return templates.TemplateResponse(request=request, name="edit.html", context={
         "kind": kind, "values": values, "back": back, "heading": labels[kind],
         "form_action": request.url.path, "error": error,
@@ -569,61 +532,62 @@ def render_edit_form(request: Request, kind: str, values, back: str, error: str 
 
 @app.get("/devices/{device_id}/edit")
 def device_edit(request: Request, device_id: int):
+    """機器の保存済みの値を取得し、共通の編集フォームへ渡す。"""
     with database() as connection:
-        require_device(connection, device_id)
-        device = connection.execute(
-            "SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+        device = require_device(connection, device_id)
     return render_edit_form(request, "device", device, f"/devices/{device_id}")
 
 
 @app.get("/devices/{device_id}/maintenance-plans/{plan_id}/edit")
 def plan_edit(request: Request, device_id: int, plan_id: int):
+    """機器に属する項目を取得し、共通の編集フォームへ渡す。"""
     with database() as connection:
-        plan = connection.execute(
-            "SELECT * FROM maintenance_plans WHERE id = ? AND device_id = ?", (plan_id, device_id)).fetchone()
-    if plan is None:
-        raise HTTPException(status_code=404, detail="メンテナンス項目が見つかりません")
+        plan = require_plan(connection, device_id, plan_id)
     return render_edit_form(request, "plan", plan, f"/devices/{device_id}#plan-{plan_id}")
 
 
 @app.get("/devices/{device_id}/maintenance-plans/{plan_id}/records/{record_id}/edit")
 def record_edit(request: Request, device_id: int, plan_id: int, record_id: int):
+    """所属を確認して記録を取得し、共通の編集フォームへ渡す。"""
     with database() as connection:
-        require_record(connection, device_id, plan_id, record_id)
-        record = connection.execute(
-            "SELECT * FROM maintenance_records WHERE id = ?", (record_id,)).fetchone()
+        record = require_record(connection, device_id, plan_id, record_id)
     return render_edit_form(request, "record", record, f"/devices/{device_id}?history=open#record-{record_id}")
 
 
 @app.get("/devices/{device_id}/maintenance-plans/{plan_id}/records/{record_id}/delete")
 def record_delete_confirmation(request: Request, device_id: int, plan_id: int, record_id: int):
+    """所属を確認した記録の削除確認画面を返す。このGETでは削除しない。"""
     with database() as connection:
-        require_record(connection, device_id, plan_id, record_id)
-        record = connection.execute(
-            "SELECT * FROM maintenance_records WHERE id = ?", (record_id,)).fetchone()
+        record = require_record(connection, device_id, plan_id, record_id)
     return templates.TemplateResponse(request=request, name="record_delete.html", context={
         "record": record, "back": f"/devices/{device_id}?history=open#record-{record_id}",
     })
 
 
 async def form_error_response(request: Request, message: str):
+    """送信済みの入力値を保持し、種類に合うフォームを422で再表示する。"""
+    # awaitでフォームの読み取り完了を待つ。dict化した値を入力欄の再表示に使う。
     values = dict(await request.form())
     parts = request.url.path.strip("/").split("/")
-    kind = "record" if "records" in parts else "plan" if (
-        "maintenance" in parts or "maintenance-plans" in parts) else "device"
-    back = f"/devices/{parts[1]}" if len(
-        parts) > 1 and parts[1].isdigit() else "/devices"
-    labels = {"device": "機器を登録", "plan": "メンテナンス項目を追加", "record": "実施記録を追加"}
-    if not request.url.path.endswith("/edit"):
-        return templates.TemplateResponse(request=request, name="edit.html", context={
-            "kind": kind, "values": values, "back": back, "heading": labels[kind],
-            "form_action": request.url.path, "error": message,
-        }, status_code=422)
-    return render_edit_form(request, kind, values, back, message, 422)
+    # URLの階層でフォームの種類を判断する。複数の条件式を重ねず順に読む。
+    if "records" in parts:
+        kind = "record"
+    elif "maintenance" in parts or "maintenance-plans" in parts:
+        kind = "plan"
+    else:
+        kind = "device"
+    back = "/devices"
+    if len(parts) > 1 and parts[1].isdigit():
+        back = f"/devices/{parts[1]}"
+    return render_edit_form(
+        request, kind, values, back, message, status_code=422,
+        creating=not request.url.path.endswith("/edit"),
+    )
 
 
 @app.exception_handler(HTTPException)
 async def handle_form_error(request: Request, error: HTTPException):
+    """自前の入力検証による422をフォームへ戻し、404などは通常の応答にする。"""
     if request.method == "POST" and error.status_code == 422:
         return await form_error_response(request, str(error.detail))
     return await http_exception_handler(request, error)
@@ -631,6 +595,7 @@ async def handle_form_error(request: Request, error: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def handle_input_error(request: Request, error: RequestValidationError):
+    """FastAPIの型・必須検証の失敗を処理し、POSTならフォームを再表示する。"""
     if request.method == "POST":
         return await form_error_response(request, "入力内容を確認してください。日付・周期などに誤りがあります。")
     from fastapi.exception_handlers import request_validation_exception_handler

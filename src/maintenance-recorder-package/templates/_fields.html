@@ -1,4 +1,6 @@
 {# 登録・編集で同じ入力欄を利用する。labelで囲み入力欄と名前を関連付ける。 #}
+{# macroは再利用できるHTMLの部品。引数で受けたDBの行や入力値をvalueへ埋め込む。 #}
+{# inputのnameがPOST時のキーとなり、main.pyのForm引数へ渡る。 #}
 {% macro device_fields(device={}) %}
 <div class="form-grid">
     <label>機器名<input name="name" value="{{ device.name or '' }}" required></label>
