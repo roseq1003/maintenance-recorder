@@ -51,6 +51,7 @@ PythonがHTMLを生成してブラウザーへ返す構成です。テンプレ�
 | `src/maintenance-recorder-package/init_db.py` | `main.lifespan()` から呼ぶDB準備。単独実行も可能 |
 | `src/maintenance-recorder-package/scheduling.py` | `main.home()` から呼ぶ予定計算。DB接続や画面表示は行わない |
 | `src/maintenance-recorder-package/notifications.py` | LINE送信、期限前・期限超過の抽出、重複通知防止を担当。単独実行すると定期通知を1回チェック |
+| `src/maintenance-recorder-package/backup.py` | SQLite backup APIでDBを複製し、古いバックアップを整理。単独実行してタスクスケジューラから利用可能 |
 | `src/maintenance-recorder-package/templates/` | mainから渡された値をHTMLに埋め込む |
 | `src/maintenance-recorder-package/static/style.css` | 各画面に共通の見た目。`base.html` から読み込む |
 | `src/maintenance-recorder-package/config/default.json` | QRの接続先をリクエストごとに読む。`production.json` への自動切替は未実装 |
@@ -241,6 +242,38 @@ python /path/to/maintenance-recorder/src/maintenance-recorder-package/notificati
 ```
 
 cronやsystemdから実行する場合も、`LINE_CHANNEL_ID` / `LINE_CHANNEL_SECRET` / 必要なら `REMINDER_DAYS` をそのプロセスの環境変数として渡してください。
+
+## データベースのバックアップ
+
+`backup.py` を単独実行すると、SQLiteのbackup APIを使って `maintenance.db` を複製します。Webアプリが起動中でも、単純なファイルコピーより整合性を保ちやすい方式です。
+
+既定の保存先は `src/maintenance-recorder-package/backups/`、保持期間は30日です。
+
+```sh
+python src/maintenance-recorder-package/backup.py
+```
+
+生成例:
+
+```text
+backups/
+  maintenance_20261102_030000.db
+  maintenance_20261103_030000.db
+```
+
+保存先と保持日数は環境変数で変更できます。Windows PowerShellの例:
+
+```powershell
+$env:BACKUP_DIR="D:\maintenance-backups"
+$env:BACKUP_RETENTION_DAYS="30"
+python src/maintenance-recorder-package/backup.py
+```
+
+`BACKUP_DIR` をUSBメモリ、外付けSSD、別ドライブなどに設定すると、常駐PC本体のストレージ故障にも備えやすくなります。未設定ならアプリ内の `backups/` を使います。
+
+バックアップ作成後は `PRAGMA integrity_check` でSQLiteとして読めることを確認し、保持期間を過ぎた、このスクリプトの命名規則に合うバックアップだけ削除します。名前の違うファイルは削除しません。
+
+Windows常駐PCでは、タスクスケジューラから毎日1回 `backup.py` を実行する運用を想定しています。
 
 ## ブランチ方針
 2026/09/30までは main に開発途中のコミットが含まれていたため、このコミット以降は以下の運用に統一する。ID:"84b615ac2a5db065ae81ae3c40cfef4dda639f2a" まで<br>
