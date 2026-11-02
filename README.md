@@ -1,7 +1,7 @@
 # maintenance-recorder
 
 家にある生活用品・家電製品などの機器、メンテナンス項目、実施記録を管理するWebアプリです。
-実施履歴から次回予定日を計算し、ダッシュボードに表示します。現在の実装には、メールなどへの自動通知やバックグラウンドの定期実行はありません。
+実施履歴から次回予定日を計算し、ダッシュボードに表示します。LINE Messaging APIを設定すると、実施完了のアナウンスと、期限前・期限超過の通知を送れます。定期通知の時刻実行はOS側のcronやsystemd timer等で行います。
 
 ## 起動方法
 
@@ -50,6 +50,7 @@ PythonがHTMLを生成してブラウザーへ返す構成です。テンプレ�
 | `src/maintenance-recorder-package/main.py` | 入口。URLの振り分け、入力検証、SQL、HTML応答、QR生成を担当 |
 | `src/maintenance-recorder-package/init_db.py` | `main.lifespan()` から呼ぶDB準備。単独実行も可能 |
 | `src/maintenance-recorder-package/scheduling.py` | `main.home()` から呼ぶ予定計算。DB接続や画面表示は行わない |
+| `src/maintenance-recorder-package/notifications.py` | LINE送信、期限前・期限超過の抽出、重複通知防止を担当。単独実行すると定期通知を1回チェック |
 | `src/maintenance-recorder-package/templates/` | mainから渡された値をHTMLに埋め込む |
 | `src/maintenance-recorder-package/static/style.css` | 各画面に共通の見た目。`base.html` から読み込む |
 | `src/maintenance-recorder-package/config/default.json` | QRの接続先をリクエストごとに読む。`production.json` への自動切替は未実装 |
@@ -173,6 +174,73 @@ erDiagram
 - `qr_base_url` を空文字にすると、アクセス中のホスト名・ポートを使います。設定はリクエストごとに読み込みます。機器名を変更しても、同じ機器IDならリンク先は変わりません。
 - スマートフォンは読み取り先のサーバーへ接続できるネットワークに接続してください。localhostや127.0.0.1は読み取った端末自身を指します。
 - LAN接続ではサーバーの待受アドレス（例：uvicornの `--host 0.0.0.0`）とファイアウォールの許可が必要です。接続先のサーバーが稼働している必要があり、IPアドレス・ポート・公開URLが変わった場合はQRも作り直してください。
+
+## LINE通知
+
+LINE Messaging APIを使い、外部からこのアプリへWebhookを受けることなく、アプリ側からLINEへHTTPS送信します。
+
+通知は次の3種類です。
+
+- 実施記録を登録した直後: 「機器 / 項目 / 実施日 / 次回予定」をアナウンス
+- 期限前: 既定では予定日の7日前から当日までの間で、定期チェックが最初に実行された1回だけ通知
+- 期限超過: 期限を過ぎた後、定期チェックが最初に実行された1回だけ通知
+
+期限前と期限超過は `notification_logs` テーブルへ送信済みとして記録します。同じ項目・同じ予定日・同じ通知種別は再送しません。実施記録が追加されて次回予定日が変わると、新しい予定日について再び通知対象になります。
+
+### LINE側の準備
+
+1. LINE公式アカウントを作成する。
+2. LINE Official Account ManagerでMessaging APIを有効にする。
+3. LINE Developers ConsoleでMessaging APIチャネルのChannel IDとChannel Secretを確認する。
+4. 通知を受けたい家族のLINEアカウントから、そのLINE公式アカウントを友だち追加する。
+
+この実装はBroadcast APIを使うため、公式アカウントを友だち追加している全員へ同じ通知が届きます。家庭内専用なら、通知対象にしたい人だけを友だちにしてください。
+
+長期アクセストークンは保存しません。送信時にChannel ID / Channel Secretから15分有効のステートレスチャネルアクセストークンを取得し、そのトークンでBroadcast APIを呼びます。
+
+### 認証情報の設定
+
+認証情報をソースコード・GitHub・DBへ保存しないでください。環境変数として設定します。
+
+Windows PowerShellの例:
+
+```powershell
+$env:LINE_CHANNEL_ID="1234567890"
+$env:LINE_CHANNEL_SECRET="ここにChannel Secret"
+$env:REMINDER_DAYS="7"
+```
+
+Linux / Raspberry Piで一時的に設定する例:
+
+```sh
+export LINE_CHANNEL_ID="1234567890"
+export LINE_CHANNEL_SECRET="ここにChannel Secret"
+export REMINDER_DAYS="7"
+```
+
+`REMINDER_DAYS` は省略すると7です。0にすると予定日当日だけ期限前通知の対象になります。
+
+### 動作確認
+
+まず定期通知チェックを手動実行します。
+
+```sh
+python src/maintenance-recorder-package/notifications.py
+```
+
+期限前・期限超過の対象があり、LINE設定が正しければ1通にまとめて送信します。対象がなければ送信しません。
+
+実施完了通知は、通常どおりWeb画面から実施記録を登録すると自動で送信されます。LINE側の障害や認証情報未設定でも、実施記録のDB保存自体は失敗させません。
+
+### Raspberry Piでの定期実行
+
+アプリ自身は時刻スケジューラーを持ちません。Raspberry Piで毎朝1回など、cronまたはsystemd timerから次のスクリプトを実行してください。
+
+```sh
+python /path/to/maintenance-recorder/src/maintenance-recorder-package/notifications.py
+```
+
+cronやsystemdから実行する場合も、`LINE_CHANNEL_ID` / `LINE_CHANNEL_SECRET` / 必要なら `REMINDER_DAYS` をそのプロセスの環境変数として渡してください。
 
 ## ブランチ方針
 2026/09/30までは main に開発途中のコミットが含まれていたため、このコミット以降は以下の運用に統一する。ID:"84b615ac2a5db065ae81ae3c40cfef4dda639f2a" まで<br>
