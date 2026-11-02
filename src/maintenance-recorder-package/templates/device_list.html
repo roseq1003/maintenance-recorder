@@ -3,7 +3,16 @@
 {% block content %}
 <div class="section-heading page-heading"><h1>機器一覧</h1><a class="button primary" href="/devices/new">＋ 機器を登録</a></div>
 <section class="panel"><div class="table-scroll"><table>
-    <thead><tr><th>ID</th><th>機器名</th><th>設置場所</th><th>メーカー・型番</th><th>購入日</th><th>状態</th><th>定期メンテナンス</th><th>備考</th></tr></thead>
+    <thead><tr>
+        <th><a href="/devices?sort=id&order={{ 'desc' if sort == 'id' and order == 'asc' else 'asc' }}">ID{% if sort == 'id' %} {{ '▲' if order == 'asc' else '▼' }}{% endif %}</a></th>
+        <th><a href="/devices?sort=name&order={{ 'desc' if sort == 'name' and order == 'asc' else 'asc' }}">機器名{% if sort == 'name' %} {{ '▲' if order == 'asc' else '▼' }}{% endif %}</a></th>
+        <th><a href="/devices?sort=location&order={{ 'desc' if sort == 'location' and order == 'asc' else 'asc' }}">設置場所{% if sort == 'location' %} {{ '▲' if order == 'asc' else '▼' }}{% endif %}</a></th>
+        <th>メーカー・型番</th>
+        <th><a href="/devices?sort=purchase_date&order={{ 'desc' if sort == 'purchase_date' and order == 'asc' else 'asc' }}">購入日{% if sort == 'purchase_date' %} {{ '▲' if order == 'asc' else '▼' }}{% endif %}</a></th>
+        <th><a href="/devices?sort=status&order={{ 'desc' if sort == 'status' and order == 'asc' else 'asc' }}">状態{% if sort == 'status' %} {{ '▲' if order == 'asc' else '▼' }}{% endif %}</a></th>
+        <th><a href="/devices?sort=maintenance_scope&order={{ 'desc' if sort == 'maintenance_scope' and order == 'asc' else 'asc' }}">定期メンテナンス{% if sort == 'maintenance_scope' %} {{ '▲' if order == 'asc' else '▼' }}{% endif %}</a></th>
+        <th>備考</th>
+    </tr></thead>
     <tbody>{% for device in devices %}<tr>
         <td>{{ device.id }}</td><td><a href="/devices/{{ device.id }}">{{ device.name }}</a></td><td>{{ device.location or '—' }}</td>
         <td>{{ device.manufacturer or '—' }}<br><span class="muted">{{ device.model_number or '—' }}</span></td><td>{{ device.purchase_date or '—' }}</td>
