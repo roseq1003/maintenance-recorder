@@ -11,4 +11,11 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = ["qrcode[pil]>=8.2,<9"]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "jinja2>=3.1,<4",
+    "python-multipart>=0.0.9,<1",
+    "qrcode[pil]>=8.2,<9",
+    "python-dotenv>=1.0,<2",
+]
