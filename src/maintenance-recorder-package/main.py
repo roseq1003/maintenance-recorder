@@ -559,6 +559,13 @@ def create_maintenance_record(
             INSERT INTO maintenance_records (maintenance_plan_id, performed_at, meter_value, note)
             VALUES (?, ?, ?, ?)
         """, (plan_id, performed_at, meter_value_db, note))
+        # 過去日の記録を後から登録した場合も、次回予定は本当の最新実施日から計算する。
+        latest_performed = connection.execute("""
+            SELECT MAX(performed_at)
+            FROM maintenance_records
+            WHERE maintenance_plan_id = ?
+        """, (plan_id,)).fetchone()[0]
+        plan_for_notification["last_performed"] = latest_performed
 
     # DB保存は先に確定する。LINE障害や未設定でも実施記録そのものは失敗させない。
     notify_completion(device_name, plan_for_notification, performed_at)
