@@ -132,9 +132,15 @@ def home(request: Request) -> HTMLResponse:
 
 
 @app.get("/devices")
-def device_list(request: Request, sort: str = "id", order: str = "asc") -> HTMLResponse:
-    """登録機器を、指定された列と昇順・降順で表示する。"""
-    # URLから受け取った文字列をそのままSQLへ入れず、許可した列だけを使う。
+def device_list(
+    request: Request,
+    sort: str = "id",
+    order: str = "asc",
+    status: str = "",
+    scope: str = "",
+) -> HTMLResponse:
+    """登録機器を、状態・メンテナンス区分で絞り込み、指定順で表示する。"""
+    # URLから受け取った列名をそのままSQLへ入れず、許可した列だけを使う。
     sort_columns = {
         "id": "id",
         "name": "name",
@@ -148,18 +154,40 @@ def device_list(request: Request, sort: str = "id", order: str = "asc") -> HTMLR
     order_by = sort_columns[sort_key]
     direction = "DESC" if order_key == "desc" else "ASC"
 
+    # 不正な値は「絞り込みなし」として扱う。値は ? でSQLへ渡す。
+    status_filter = status if status in STATUSES else ""
+    scope_filter = scope if scope in SCOPES else ""
+    conditions: list[str] = []
+    params: list[str] = []
+
+    if status_filter:
+        conditions.append("status = ?")
+        params.append(status_filter)
+    if scope_filter:
+        conditions.append("maintenance_scope = ?")
+        params.append(scope_filter)
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
     with database() as connection:
         devices: list[sqlite3.Row] = connection.execute(f"""
             SELECT id, name, manufacturer, model_number, location, purchase_date,
                    note, status, maintenance_scope
             FROM devices
+            {where_clause}
             ORDER BY {order_by} {direction}, id ASC
-        """).fetchall()
+        """, params).fetchall()
 
     return templates.TemplateResponse(
         request=request,
         name="device_list.html",
-        context={"devices": devices, "sort": sort_key, "order": order_key},
+        context={
+            "devices": devices,
+            "sort": sort_key,
+            "order": order_key,
+            "status_filter": status_filter,
+            "scope_filter": scope_filter,
+        },
     )
 
 
