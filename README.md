@@ -5,12 +5,10 @@
 
 ## 起動方法
 
-FastAPI、Uvicorn、Jinja2、python-multipart、qrcode（Pillowを含む）が必要です。
-`pyproject.toml` に記載されている依存関係は現在QR関連のみなので、初めて環境を作る際は以下を実行してください。
+必要なPythonライブラリは `pyproject.toml` と `requirements.txt` で管理します。
 リポジトリ直下から、使用するPython環境で起動します。
 
 ```sh
-python -m pip install fastapi uvicorn jinja2 python-multipart "qrcode[pil]>=8.2,<9"
 python -m uvicorn main:app --app-dir src/maintenance-recorder-package --host 127.0.0.1 --port 8000
 ```
 
@@ -199,25 +197,32 @@ LINE Messaging APIを使い、外部からこのアプリへWebhookを受ける�
 
 長期アクセストークンは保存しません。送信時にChannel ID / Channel Secretから15分有効のステートレスチャネルアクセストークンを取得し、そのトークンでBroadcast APIを呼びます。
 
-### 認証情報の設定
+### 認証情報と .env の配置
 
-認証情報をソースコード・GitHub・DBへ保存しないでください。環境変数として設定します。
+認証情報をソースコード・GitHub・DBへ保存しないでください。
+リポジトリ直下（`README.md`、`pyproject.toml` と同じ階層）に `.env` を置きます。
 
-Windows PowerShellの例:
-
-```powershell
-$env:LINE_CHANNEL_ID="1234567890"
-$env:LINE_CHANNEL_SECRET="ここにChannel Secret"
-$env:REMINDER_DAYS="7"
+```text
+maintenance-recorder/
+├─ .env
+├─ .env.example
+├─ README.md
+├─ pyproject.toml
+├─ requirements.txt
+└─ src/
 ```
 
-Linux / Raspberry Piで一時的に設定する例:
+最初は `.env.example` を `.env` にコピーし、実際の値を設定します。
 
-```sh
-export LINE_CHANNEL_ID="1234567890"
-export LINE_CHANNEL_SECRET="ここにChannel Secret"
-export REMINDER_DAYS="7"
+```env
+LINE_CHANNEL_ID=1234567890
+LINE_CHANNEL_SECRET=ここにChannel Secret
+REMINDER_DAYS=7
+BACKUP_DIR=
+BACKUP_RETENTION_DAYS=30
 ```
+
+`.env` はGitの対象外です。`notifications.py` と `backup.py` は実行場所に関係なく、このリポジトリ直下の `.env` を自動で読み込みます。OS側ですでに同名の環境変数が設定されている場合は、その値を優先します。
 
 `REMINDER_DAYS` は省略すると7です。0にすると予定日当日だけ期限前通知の対象になります。
 
