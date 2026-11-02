@@ -14,6 +14,7 @@ import sys
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from dotenv import load_dotenv
 from typing import Optional, Union
 
 if __package__:
@@ -25,6 +26,9 @@ else:
 
 
 BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parents[1]
+ENV_PATH = PROJECT_ROOT / ".env"
+load_dotenv(ENV_PATH)
 DB_PATH = BASE_DIR / "maintenance.db"
 LINE_TOKEN_URL = "https://api.line.me/oauth2/v3/token"
 LINE_BROADCAST_URL = "https://api.line.me/v2/bot/message/broadcast"
