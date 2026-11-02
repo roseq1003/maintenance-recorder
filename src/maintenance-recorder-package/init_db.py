@@ -52,6 +52,17 @@ def init_db(db_path: Union[str, Path] = DB_PATH) -> None:
                 FOREIGN KEY (maintenance_plan_id) REFERENCES maintenance_plans(id)
             )
         """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS notification_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                notification_type TEXT NOT NULL,
+                maintenance_plan_id INTEGER NOT NULL,
+                target_date TEXT NOT NULL,
+                sent_at TEXT NOT NULL,
+                FOREIGN KEY (maintenance_plan_id) REFERENCES maintenance_plans(id),
+                UNIQUE (notification_type, maintenance_plan_id, target_date)
+            )
+        """)
 
         # CREATE TABLE IF NOT EXISTS は既存テーブルを変更しないため、
         # 追加した項目を古いDBにも反映する。テーブル名・列名は固定値のみ。
