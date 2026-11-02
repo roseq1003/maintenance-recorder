@@ -9,10 +9,14 @@ from datetime import datetime, timedelta
 import os
 from pathlib import Path
 import sqlite3
+from dotenv import load_dotenv
 from typing import Optional, Union
 
 
 BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parents[1]
+ENV_PATH = PROJECT_ROOT / ".env"
+load_dotenv(ENV_PATH)
 DB_PATH = BASE_DIR / "maintenance.db"
 DEFAULT_BACKUP_DIR = BASE_DIR / "backups"
 BACKUP_PREFIX = "maintenance_"
