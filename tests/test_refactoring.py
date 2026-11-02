@@ -18,7 +18,9 @@ from urllib.parse import urlencode
 import uvicorn
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "maintenance-recorder-package"))
+import backup
 import main
+import notifications
 from init_db import init_db
 from scheduling import group_schedules, next_date, scheduled_date
 
@@ -69,6 +71,114 @@ class SchedulingTests(unittest.TestCase):
         self.assertEqual(len(december["next_month_list"]), 1)
 
 
+class BackupTests(unittest.TestCase):
+    def test_backup_copies_database_and_prunes_old_files(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        db_path = root / "source.db"
+        backup_dir = root / "backups"
+
+        with closing(sqlite3.connect(db_path)) as connection:
+            connection.execute("CREATE TABLE sample (value TEXT)")
+            connection.execute("INSERT INTO sample VALUES ('ok')")
+            connection.commit()
+
+        backup_dir.mkdir()
+        old_backup = backup_dir / "maintenance_20260901_030000.db"
+        old_backup.write_bytes(b"old")
+        unrelated = backup_dir / "keep-me.db"
+        unrelated.write_bytes(b"keep")
+
+        created = backup.create_backup(
+            db_path,
+            backup_dir=backup_dir,
+            retention_days=30,
+            current=backup.datetime(2026, 11, 2, 3, 0, 0),
+        )
+
+        self.assertTrue(created.exists())
+        self.assertFalse(old_backup.exists())
+        self.assertTrue(unrelated.exists())
+
+        with closing(sqlite3.connect(created)) as connection:
+            self.assertEqual(
+                connection.execute("SELECT value FROM sample").fetchone()[0],
+                "ok",
+            )
+
+
+class NotificationTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.db_path = Path(temporary.name) / "test.db"
+        init_db(self.db_path)
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute("""
+                INSERT INTO devices (name, status, maintenance_scope)
+                VALUES ('エアコン', '稼働中', '対象')
+            """)
+            connection.execute("""
+                INSERT INTO maintenance_plans (
+                    device_id, name, interval_value, interval_unit, priority, first_due_date
+                )
+                VALUES (1, 'フィルター清掃', 1, 'month', '中', '2026-11-09')
+            """)
+
+    def test_reminder_and_overdue_are_each_sent_once(self):
+        with patch.object(notifications, "send_line_broadcast", return_value=True) as sender:
+            self.assertEqual(
+                notifications.send_scheduled_notifications(
+                    self.db_path, current=date(2026, 11, 2), reminder_days=7
+                ),
+                1,
+            )
+            # 同じ予定日の期限前通知は二重送信しない。
+            self.assertEqual(
+                notifications.send_scheduled_notifications(
+                    self.db_path, current=date(2026, 11, 3), reminder_days=7
+                ),
+                0,
+            )
+            # 期限を過ぎたら「期限超過」という別種の通知を1回送る。
+            self.assertEqual(
+                notifications.send_scheduled_notifications(
+                    self.db_path, current=date(2026, 11, 10), reminder_days=7
+                ),
+                1,
+            )
+            self.assertEqual(
+                notifications.send_scheduled_notifications(
+                    self.db_path, current=date(2026, 11, 11), reminder_days=7
+                ),
+                0,
+            )
+            self.assertEqual(sender.call_count, 2)
+
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            rows = connection.execute("""
+                SELECT notification_type, target_date
+                FROM notification_logs
+                ORDER BY id
+            """).fetchall()
+        self.assertEqual(rows, [("reminder", "2026-11-09"), ("overdue", "2026-11-09")])
+
+    def test_completion_message_contains_next_due_date(self):
+        plan_row = {
+            "name": "フィルター清掃",
+            "interval_value": 1,
+            "interval_unit": "month",
+            "first_due_date": "",
+            "last_performed": None,
+        }
+        message = notifications.completion_message(
+            "エアコン", plan_row, "2026-11-02"
+        )
+        self.assertIn("エアコン / フィルター清掃", message)
+        self.assertIn("次回予定: 2026-12-02", message)
+
+
 class HttpTests(unittest.TestCase):
     def setUp(self):
         """空きポートと一時DBを使い、実際のFastAPIアプリを起動する。"""
@@ -78,7 +188,8 @@ class HttpTests(unittest.TestCase):
         config_path = Path(temporary.name) / "config.json"
         config_path.write_text(json.dumps({"qr_base_url": "http://example.test:8000"}))
         for name, value in [("DB_PATH", self.db_path), ("QR_CONFIG_PATH", config_path),
-                            ("today", lambda: date(2026, 9, 30))]:
+                            ("today", lambda: date(2026, 9, 30)),
+                            ("notify_completion", lambda *args, **kwargs: True)]:
             replacement = patch.object(main, name, value)
             replacement.start()
             self.addCleanup(replacement.stop)

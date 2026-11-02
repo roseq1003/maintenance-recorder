@@ -24,8 +24,10 @@ from fastapi.exception_handlers import http_exception_handler
 # 「.」付きは同じパッケージ内からの相対インポート。
 # next_date / scheduled_dateは、従来のmain経由の参照も使えるように公開を維持する。
 if __package__:
+    from .notifications import notify_completion
     from .scheduling import group_schedules, next_date, scheduled_date
 else:
+    from notifications import notify_completion
     from scheduling import group_schedules, next_date, scheduled_date
 
 
@@ -132,22 +134,62 @@ def home(request: Request) -> HTMLResponse:
 
 
 @app.get("/devices")
-def device_list(request: Request) -> HTMLResponse:
-    """登録機器をID順に表示する。"""
+def device_list(
+    request: Request,
+    sort: str = "id",
+    order: str = "asc",
+    status: str = "",
+    scope: str = "",
+) -> HTMLResponse:
+    """登録機器を、状態・メンテナンス区分で絞り込み、指定順で表示する。"""
+    # URLから受け取った列名をそのままSQLへ入れず、許可した列だけを使う。
+    sort_columns = {
+        "id": "id",
+        "name": "name",
+        "location": "location",
+        "purchase_date": "purchase_date",
+        "status": "status",
+        "maintenance_scope": "maintenance_scope",
+    }
+    sort_key = sort if sort in sort_columns else "id"
+    order_key = "desc" if order == "desc" else "asc"
+    order_by = sort_columns[sort_key]
+    direction = "DESC" if order_key == "desc" else "ASC"
+
+    # 不正な値は「絞り込みなし」として扱う。値は ? でSQLへ渡す。
+    status_filter = status if status in STATUSES else ""
+    scope_filter = scope if scope in SCOPES else ""
+    conditions: list[str] = []
+    params: list[str] = []
+
+    if status_filter:
+        conditions.append("status = ?")
+        params.append(status_filter)
+    if scope_filter:
+        conditions.append("maintenance_scope = ?")
+        params.append(scope_filter)
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
     with database() as connection:
-        # execute() はカーソルを返すため、別途 cursor() を作らず結果を取得できる。
-        cursor: sqlite3.Cursor = connection.execute("""
+        devices: list[sqlite3.Row] = connection.execute(f"""
             SELECT id, name, manufacturer, model_number, location, purchase_date,
                    note, status, maintenance_scope
             FROM devices
-            ORDER BY id
-        """)
-        # 各Rowは機器1件。devices[0]は先頭行、devices[0]["name"]はその機器名。
-        # 0件ではdevices[0]を参照できないが、forで空リストを回すのは問題ない。
-        devices: list[sqlite3.Row] = cursor.fetchall()
+            {where_clause}
+            ORDER BY {order_by} {direction}, id ASC
+        """, params).fetchall()
 
     return templates.TemplateResponse(
-        request=request, name="device_list.html", context={"devices": devices}
+        request=request,
+        name="device_list.html",
+        context={
+            "devices": devices,
+            "sort": sort_key,
+            "order": order_key,
+            "status_filter": status_filter,
+            "scope_filter": scope_filter,
+        },
     )
 
 
@@ -500,11 +542,16 @@ def create_maintenance_record(
     meter_value: str = Form(""),
     note: str = Form("")
 ) -> RedirectResponse:
-    """実施日・任意のメーター値・備考をメンテナンス項目にひも付けて保存する。"""
+    """実施記録を保存し、LINE設定済みなら完了アナウンスも送る。"""
     meter_value_db = validate_record(performed_at, meter_value)
     with database() as connection:
         # POSTだけを直接送ることも可能なので、入力画面と同じ所属確認を行う。
-        require_plan(connection, device_id, plan_id)
+        device = require_device(connection, device_id)
+        plan = require_plan(connection, device_id, plan_id)
+
+        # 通知はDB接続を閉じた後でも使えるよう、必要な値を通常のdictへコピーしておく。
+        device_name = device["name"]
+        plan_for_notification = dict(plan)
 
         # validate_recordで変換済みの数値を保存する。NoneはSQLiteのNULLになる。
         # 実施日はYYYY-MM-DDの文字列のまま保存するため、SQLでも日付順に並べられる。
@@ -512,7 +559,16 @@ def create_maintenance_record(
             INSERT INTO maintenance_records (maintenance_plan_id, performed_at, meter_value, note)
             VALUES (?, ?, ?, ?)
         """, (plan_id, performed_at, meter_value_db, note))
+        # 過去日の記録を後から登録した場合も、次回予定は本当の最新実施日から計算する。
+        latest_performed = connection.execute("""
+            SELECT MAX(performed_at)
+            FROM maintenance_records
+            WHERE maintenance_plan_id = ?
+        """, (plan_id,)).fetchone()[0]
+        plan_for_notification["last_performed"] = latest_performed
 
+    # DB保存は先に確定する。LINE障害や未設定でも実施記録そのものは失敗させない。
+    notify_completion(device_name, plan_for_notification, performed_at)
     return RedirectResponse(url=f"/devices/{device_id}", status_code=303)
 
 
