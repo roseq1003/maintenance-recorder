@@ -18,6 +18,7 @@ from urllib.parse import urlencode
 import uvicorn
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "maintenance-recorder-package"))
+import backup
 import main
 import notifications
 from init_db import init_db
@@ -68,6 +69,43 @@ class SchedulingTests(unittest.TestCase):
         december = group_schedules([plan(due="2027-01-01")], date(2026, 12, 31))
         self.assertEqual(december["next_month"], "2027年1月")
         self.assertEqual(len(december["next_month_list"]), 1)
+
+
+class BackupTests(unittest.TestCase):
+    def test_backup_copies_database_and_prunes_old_files(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        db_path = root / "source.db"
+        backup_dir = root / "backups"
+
+        with closing(sqlite3.connect(db_path)) as connection:
+            connection.execute("CREATE TABLE sample (value TEXT)")
+            connection.execute("INSERT INTO sample VALUES ('ok')")
+            connection.commit()
+
+        backup_dir.mkdir()
+        old_backup = backup_dir / "maintenance_20260901_030000.db"
+        old_backup.write_bytes(b"old")
+        unrelated = backup_dir / "keep-me.db"
+        unrelated.write_bytes(b"keep")
+
+        created = backup.create_backup(
+            db_path,
+            backup_dir=backup_dir,
+            retention_days=30,
+            current=backup.datetime(2026, 11, 2, 3, 0, 0),
+        )
+
+        self.assertTrue(created.exists())
+        self.assertFalse(old_backup.exists())
+        self.assertTrue(unrelated.exists())
+
+        with closing(sqlite3.connect(created)) as connection:
+            self.assertEqual(
+                connection.execute("SELECT value FROM sample").fetchone()[0],
+                "ok",
+            )
 
 
 class NotificationTests(unittest.TestCase):
