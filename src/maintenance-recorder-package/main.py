@@ -132,22 +132,34 @@ def home(request: Request) -> HTMLResponse:
 
 
 @app.get("/devices")
-def device_list(request: Request) -> HTMLResponse:
-    """登録機器をID順に表示する。"""
+def device_list(request: Request, sort: str = "id", order: str = "asc") -> HTMLResponse:
+    """登録機器を、指定された列と昇順・降順で表示する。"""
+    # URLから受け取った文字列をそのままSQLへ入れず、許可した列だけを使う。
+    sort_columns = {
+        "id": "id",
+        "name": "name",
+        "location": "location",
+        "purchase_date": "purchase_date",
+        "status": "status",
+        "maintenance_scope": "maintenance_scope",
+    }
+    sort_key = sort if sort in sort_columns else "id"
+    order_key = "desc" if order == "desc" else "asc"
+    order_by = sort_columns[sort_key]
+    direction = "DESC" if order_key == "desc" else "ASC"
+
     with database() as connection:
-        # execute() はカーソルを返すため、別途 cursor() を作らず結果を取得できる。
-        cursor: sqlite3.Cursor = connection.execute("""
+        devices: list[sqlite3.Row] = connection.execute(f"""
             SELECT id, name, manufacturer, model_number, location, purchase_date,
                    note, status, maintenance_scope
             FROM devices
-            ORDER BY id
-        """)
-        # 各Rowは機器1件。devices[0]は先頭行、devices[0]["name"]はその機器名。
-        # 0件ではdevices[0]を参照できないが、forで空リストを回すのは問題ない。
-        devices: list[sqlite3.Row] = cursor.fetchall()
+            ORDER BY {order_by} {direction}, id ASC
+        """).fetchall()
 
     return templates.TemplateResponse(
-        request=request, name="device_list.html", context={"devices": devices}
+        request=request,
+        name="device_list.html",
+        context={"devices": devices, "sort": sort_key, "order": order_key},
     )
 
 
