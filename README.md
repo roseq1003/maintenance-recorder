@@ -1,19 +1,98 @@
 # maintenance-recorder
 
 家にある生活用品・家電製品などの機器、メンテナンス項目、実施記録を管理するWebアプリです。
-実施履歴から次回予定日を計算し、ダッシュボードに表示します。LINE Messaging APIを設定すると、実施完了のアナウンスと、期限前・期限超過の通知を送れます。定期通知の時刻実行はOS側のcronやsystemd timer等で行います。
+実施履歴から次回予定日を計算し、ダッシュボードに表示します。LINE Messaging APIを設定すると、実施完了のアナウンスと、期限前・期限超過の通知を送れます。家庭内LANの常駐Windows PCでの運用を想定し、定期通知とバックアップはWindowsタスクスケジューラから実行できます。
 
-## 起動方法
+## Windows PCへのセットアップと起動
 
-必要なPythonライブラリは `pyproject.toml` と `requirements.txt` で管理します。
-リポジトリ直下から、使用するPython環境で起動します。
+常駐PCにはPythonとGitをインストールします。VSCodeは必須ではありません。
+以下はPowerShellで、リポジトリ直下から実行します。
 
-```sh
-python -m uvicorn main:app --app-dir src/maintenance-recorder-package --host 127.0.0.1 --port 8000
+### 1. ソースコードを取得
+
+初回はGitHubからcloneします。
+
+```powershell
+git clone https://github.com/roseq1003/maintenance-recorder.git
+cd maintenance-recorder
+git switch dev
 ```
 
-ブラウザーで `http://127.0.0.1:8000` を開きます。`main:app` は「main.pyにあるappを読み込む」という指定です。
-DBは起動時に初期化・更新されます。以下の図は2026年9月のリファクタリング後の実装に対応します。
+すでにclone済みなら、更新時は次のコマンドで最新化します。
+
+```powershell
+git switch dev
+git pull origin dev
+```
+
+### 2. Python仮想環境を作成
+
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+### 3. 必要ライブラリを一括インストール
+
+必要なPythonライブラリは `requirements.txt` と `pyproject.toml` で管理しています。
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+### 4. .envを作成
+
+リポジトリ直下の `.env.example` をコピーします。
+
+```powershell
+Copy-Item .env.example .env
+```
+
+作成した `.env` にLINEのChannel ID / Channel Secretなどを設定します。`.env` はGitの対象外です。
+
+### 5. QRコード用の接続先IPを確認
+
+`src/maintenance-recorder-package/config/default.json` の `qr_base_url` を、常駐PCの家庭内LAN上の固定IPに合わせます。
+
+例:
+
+```json
+"qr_base_url": "http://192.168.3.167:8000"
+```
+
+このIPはスマートフォンから常駐PCへアクセスするためのアドレスです。印刷済みQRのリンク先を変えないため、常駐PCでは固定IPまたはDHCP固定割当を推奨します。
+
+### 6. Webアプリを起動
+
+家庭内LANの別端末からもアクセスする場合は `--host 0.0.0.0` で起動します。
+
+```powershell
+python -m uvicorn main:app --app-dir src/maintenance-recorder-package --host 0.0.0.0 --port 8000
+```
+
+常駐PC自身では `http://127.0.0.1:8000`、同じ家庭内LANのスマートフォン等からは `http://固定IP:8000` を開きます。
+Windows Defender Firewallで許可する場合は、家庭内のプライベートネットワークだけを対象にしてください。ルーターのポート開放は行わず、インターネットへ直接公開しない運用を想定しています。
+
+DBは起動時に `src/maintenance-recorder-package/maintenance.db` として作成・更新されます。このDBファイルはGit管理の対象外です。
+
+### 7. 通知とバックアップを手動確認
+
+```powershell
+python src/maintenance-recorder-package/notifications.py
+python src/maintenance-recorder-package/backup.py
+```
+
+ここまで確認できたら、常駐運用ではWindowsタスクスケジューラに次の3処理を登録します。
+
+```text
+PC起動時    → UvicornでWebアプリを起動
+毎日1回     → notifications.py を実行
+毎日1回     → backup.py を実行
+```
+
+PCを常時稼働させる場合は、Windowsのスリープを無効にし、ノートPCなら必要に応じて「カバーを閉じたときの動作」を「何もしない」に設定します。
+
+以下の図は2026年9月のリファクタリング後の実装に対応します。
 
 ## 全体プロセスとスクリプトの関係
 
@@ -167,7 +246,7 @@ erDiagram
 
 ## 機器のQRコード
 
-- QR生成用の依存ライブラリは `python -m pip install "qrcode[pil]>=8.2,<9"` で追加できます。
+- QR生成用ライブラリは `requirements.txt` に含まれているため、一括インストール時に導入されます。
 - 機器詳細の「QR出力」タブで、その機器の詳細URLを表示・PNG保存できます。QRはサーバー内で生成し、外部のQR生成サービスは使いません。
 - 読み取り先のサーバーURLは `src/maintenance-recorder-package/config/default.json` の `qr_base_url` で指定します。現在は `http://192.168.3.167:8000` です。画面をlocalhostや8001番で開いても、表示URLとQR画像の読み取り先は指定したサーバーの `/devices/機器ID` になります。
 - `qr_base_url` を空文字にすると、アクセス中のホスト名・ポートを使います。設定はリクエストごとに読み込みます。機器名を変更しても、同じ機器IDならリンク先は変わりません。
@@ -238,15 +317,15 @@ python src/maintenance-recorder-package/notifications.py
 
 実施完了通知は、通常どおりWeb画面から実施記録を登録すると自動で送信されます。LINE側の障害や認証情報未設定でも、実施記録のDB保存自体は失敗させません。
 
-### Raspberry Piでの定期実行
+### Windowsでの定期実行
 
-アプリ自身は時刻スケジューラーを持ちません。Raspberry Piで毎朝1回など、cronまたはsystemd timerから次のスクリプトを実行してください。
+アプリ自身は時刻スケジューラーを持ちません。常駐Windows PCではタスクスケジューラから、たとえば毎朝1回次のスクリプトを実行します。
 
-```sh
-python /path/to/maintenance-recorder/src/maintenance-recorder-package/notifications.py
+```powershell
+python src/maintenance-recorder-package/notifications.py
 ```
 
-cronやsystemdから実行する場合も、`LINE_CHANNEL_ID` / `LINE_CHANNEL_SECRET` / 必要なら `REMINDER_DAYS` をそのプロセスの環境変数として渡してください。
+`notifications.py` はリポジトリ直下の `.env` を自動で読み込むため、PowerShellを開いて環境変数を毎回設定する必要はありません。タスクスケジューラでは、venv内の `python.exe` を直接指定すると安定して実行できます。
 
 ## データベースのバックアップ
 
@@ -278,7 +357,7 @@ python src/maintenance-recorder-package/backup.py
 
 バックアップ作成後は `PRAGMA integrity_check` でSQLiteとして読めることを確認し、保持期間を過ぎた、このスクリプトの命名規則に合うバックアップだけ削除します。名前の違うファイルは削除しません。
 
-Windows常駐PCでは、タスクスケジューラから毎日1回 `backup.py` を実行する運用を想定しています。
+Windows常駐PCでは、タスクスケジューラから毎日1回 `backup.py` を実行する運用を想定しています。`backup.py` もリポジトリ直下の `.env` を自動で読み込みます。
 
 ## ブランチ方針
 2026/09/30までは main に開発途中のコミットが含まれていたため、このコミット以降は以下の運用に統一する。ID:"84b615ac2a5db065ae81ae3c40cfef4dda639f2a" まで<br>
