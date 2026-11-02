@@ -96,7 +96,11 @@ def send_line_broadcast(text: str) -> bool:
 def completion_message(device_name: str, plan, performed_at: str) -> str:
     """実施記録登録後に送る本文を作る。日付周期なら次回予定も載せる。"""
     plan_for_schedule = dict(plan)
-    plan_for_schedule["last_performed"] = performed_at
+    # 呼び出し側が最新実施日を渡した場合はそれを優先する。
+    # 過去日の記録を後から追加しても、次回予定を古い日付基準にしないため。
+    plan_for_schedule["last_performed"] = (
+        plan_for_schedule.get("last_performed") or performed_at
+    )
     due = scheduled_date(plan_for_schedule)
 
     lines = [
