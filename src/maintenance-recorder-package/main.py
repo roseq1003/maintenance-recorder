@@ -24,8 +24,10 @@ from fastapi.exception_handlers import http_exception_handler
 # 「.」付きは同じパッケージ内からの相対インポート。
 # next_date / scheduled_dateは、従来のmain経由の参照も使えるように公開を維持する。
 if __package__:
+    from .notifications import notify_completion
     from .scheduling import group_schedules, next_date, scheduled_date
 else:
+    from notifications import notify_completion
     from scheduling import group_schedules, next_date, scheduled_date
 
 
@@ -540,11 +542,16 @@ def create_maintenance_record(
     meter_value: str = Form(""),
     note: str = Form("")
 ) -> RedirectResponse:
-    """実施日・任意のメーター値・備考をメンテナンス項目にひも付けて保存する。"""
+    """実施記録を保存し、LINE設定済みなら完了アナウンスも送る。"""
     meter_value_db = validate_record(performed_at, meter_value)
     with database() as connection:
         # POSTだけを直接送ることも可能なので、入力画面と同じ所属確認を行う。
-        require_plan(connection, device_id, plan_id)
+        device = require_device(connection, device_id)
+        plan = require_plan(connection, device_id, plan_id)
+
+        # 通知はDB接続を閉じた後でも使えるよう、必要な値を通常のdictへコピーしておく。
+        device_name = device["name"]
+        plan_for_notification = dict(plan)
 
         # validate_recordで変換済みの数値を保存する。NoneはSQLiteのNULLになる。
         # 実施日はYYYY-MM-DDの文字列のまま保存するため、SQLでも日付順に並べられる。
@@ -553,6 +560,8 @@ def create_maintenance_record(
             VALUES (?, ?, ?, ?)
         """, (plan_id, performed_at, meter_value_db, note))
 
+    # DB保存は先に確定する。LINE障害や未設定でも実施記録そのものは失敗させない。
+    notify_completion(device_name, plan_for_notification, performed_at)
     return RedirectResponse(url=f"/devices/{device_id}", status_code=303)
 
 
